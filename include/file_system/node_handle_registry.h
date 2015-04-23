@@ -4,8 +4,10 @@
  * \date   2012-04-11
  */
 
-#ifndef _NODE_HANDLE_REGISTRY_H_
-#define _NODE_HANDLE_REGISTRY_H_
+#ifndef _FILE_SYSTEM__NODE_HANDLE_REGISTRY_H_
+#define _FILE_SYSTEM__NODE_HANDLE_REGISTRY_H_
+
+#include <file_system/node.h>
 
 namespace File_system {
 
@@ -43,7 +45,7 @@ namespace File_system {
 
 			Lock mutable _lock;
 
-			Node *_nodes[MAX_NODE_HANDLES];
+			Node_base *_nodes[MAX_NODE_HANDLES];
 
 			/**
 			 * Each open node handle can act as a listener to be informed about
@@ -56,7 +58,7 @@ namespace File_system {
 			 *
 			 * \throw Out_of_node_handles
 			 */
-			int _alloc(Node *node)
+			int _alloc(Node_base *node)
 			{
 				Lock::Guard guard(_lock);
 
@@ -94,15 +96,18 @@ namespace File_system {
 			 */
 			void free(Node_handle handle)
 			{
+				Lock::Guard guard(_lock);
+
 				if (!_in_range(handle.value))
 					return;
 
 				/*
 				 * Notify listeners about the changed file.
 				 */
-				Node *node = dynamic_cast<Node *>(_nodes[handle.value]);
+				Node_base *node = dynamic_cast<Node_base *>(_nodes[handle.value]);
 				if (!node) { return; }
 
+				node->lock();
 				node->notify_listeners();
 
 				/*
@@ -115,6 +120,8 @@ namespace File_system {
 
 				_nodes[handle.value] = 0;
 				listener = Listener();
+
+				node->unlock();
 			}
 
 			/**
@@ -125,6 +132,8 @@ namespace File_system {
 			template <typename HANDLE_TYPE>
 			typename Node_type<HANDLE_TYPE>::Type *lookup(HANDLE_TYPE handle)
 			{
+				Lock::Guard guard(_lock);
+
 				if (!_in_range(handle.value))
 					throw Invalid_handle();
 
@@ -136,8 +145,34 @@ namespace File_system {
 				return node;
 			}
 
+			/**
+			 * Lookup node using its handle as key
+			 *
+			 * The node returned by this function is in a locked state.
+			 *
+			 * \throw Invalid_handle
+			 */
+			template <typename HANDLE_TYPE>
+			typename Node_type<HANDLE_TYPE>::Type *lookup_and_lock(HANDLE_TYPE handle)
+			{
+				Lock::Guard guard(_lock);
+
+				if (!_in_range(handle.value))
+					throw Invalid_handle();
+
+				typedef typename Node_type<HANDLE_TYPE>::Type Node_base;
+				Node_base *node = dynamic_cast<Node_base *>(_nodes[handle.value]);
+				if (!node)
+					throw Invalid_handle();
+
+				node->lock();
+				return node;
+			}
+
 			bool refer_to_same_node(Node_handle h1, Node_handle h2) const
 			{
+				Lock::Guard guard(_lock);
+
 				if (!_in_range(h1.value) || !_in_range(h2.value)) {
 					PDBG("refer_to_same_node -> Invalid_handle");
 					throw Invalid_handle();
@@ -151,14 +186,19 @@ namespace File_system {
 			 */
 			void sigh(Node_handle handle, Signal_context_capability sigh)
 			{
+				Lock::Guard guard(_lock);
+
 				if (!_in_range(handle.value))
 					throw Invalid_handle();
 
-				Node *node = dynamic_cast<Node *>(_nodes[handle.value]);
+				Node_base *node = dynamic_cast<Node_base *>(_nodes[handle.value]);
 				if (!node) {
 					PDBG("Invalid_handle");
 					throw Invalid_handle();
 				}
+
+				node->lock();
+				Node_lock_guard node_lock_guard(node);
 
 				Listener &listener = _listeners[handle.value];
 
@@ -178,4 +218,4 @@ namespace File_system {
 	};
 }
 
-#endif /* _NODE_HANDLE_REGISTRY_H_ */
+#endif /* _FILE_SYSTEM__NODE_HANDLE_REGISTRY_H_ */
