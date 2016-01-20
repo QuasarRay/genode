@@ -25,8 +25,8 @@
 #include <base/env.h>
 #include <base/heap.h>
 
-/* local includes */
-#include <platform_env_common.h>
+/* base-internal includes */
+#include <base/internal/platform_env_common.h>
 
 
 namespace Genode {

@@ -19,8 +19,8 @@
 #include <cpu/atomic.h>
 #include <cpu/memory_barrier.h>
 
-/* local includes */
-#include <lock_helper.h>
+/* base-internal includes */
+#include <base/internal/lock_helper.h>
 
 /*
  * Spinlock functions used for protecting the critical sections within the
