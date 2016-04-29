@@ -1,5 +1,5 @@
 /*
- * \brief  Core-specific back end of the RPC entrypoint
+ * \brief  RPC entrypoint support for allocating RPC object capabilities
  * \author Norman Feske
  * \date   2016-01-19
  */

@@ -1,5 +1,5 @@
 /*
- * \brief  NOVA-specific implementation of the Thread API
+ * \brief  Implementation of the Thread API
  * \author Norman Feske
  * \date   2010-01-19
  */

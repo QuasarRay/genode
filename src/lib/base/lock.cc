@@ -20,11 +20,6 @@
 
 using namespace Genode;
 
-/**
- * Track interesting lock conditions, counters are only used for testing
- */
-int debug_lock_sleep_race_cnt;
-
 
 static inline Genode::Thread_base *invalid_thread_base()
 {
@@ -48,7 +43,7 @@ void Cancelable_lock::Applicant::wake_up()
 
 	/*
 	 * Deal with the race that may occur in the 'lock' function between
-	 * releasing the spinlock and calling 'L4_Stop'.
+	 * releasing the spinlock and blocking myself.
 	 */
 
 	for (;;) {
@@ -56,7 +51,6 @@ void Cancelable_lock::Applicant::wake_up()
 		if (thread_check_stopped_and_restart(_thread_base))
 			return;
 
-		debug_lock_sleep_race_cnt++;  /* only for statistics */
 		thread_switch_to(_thread_base);
 	}
 }

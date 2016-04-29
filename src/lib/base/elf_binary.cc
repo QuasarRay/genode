@@ -2,8 +2,6 @@
  * \brief  ELF binary utility
  * \author Christian Helmuth
  * \date   2006-05-04
- *
- * XXX define some useful return values for error checking
  */
 
 /*

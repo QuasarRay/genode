@@ -302,9 +302,12 @@ void Signal_receiver::dispatch_signals(Signal_source *signal_source)
 	}
 }
 
+
 void Signal_receiver::_platform_begin_dissolve(Signal_context *) { }
+
 
 void Signal_receiver::_platform_finish_dissolve(Signal_context * const c) {
 	signal_context_registry()->remove(&c->_registry_le); }
+
 
 void Signal_receiver::_platform_destructor() { }

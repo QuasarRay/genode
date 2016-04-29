@@ -1,5 +1,5 @@
 /*
- * \brief  Fiasco-specific implementation of the thread API
+ * \brief  Accessor to user-level thread-control block (UTCB)
  * \author Norman Feske
  * \date   2016-01-23
  */
@@ -18,10 +18,5 @@
 #include <base/internal/stack.h>
 #include <base/internal/native_utcb.h>
 
-using namespace Genode;
 
-
-Native_utcb *Thread_base::utcb()
-{
-	return &_stack->utcb();
-}
+Genode::Native_utcb *Genode::Thread_base::utcb() { return &_stack->utcb(); }

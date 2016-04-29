@@ -32,7 +32,6 @@ using namespace Genode;
  * This function is provided by the process environment.
  */
 namespace Genode {
-
 	extern Region_map  * const env_stack_area_region_map;
 	extern Ram_session * const env_stack_area_ram_session;
 }
@@ -46,9 +45,9 @@ void Stack::size(size_t const size)
 
 	/* check if the stack enhancement fits the stack region */
 	enum {
-		UTCB_SIZE         = sizeof(Native_utcb),
-		PAGE_SIZE_LOG2    = 12,
-		PAGE_SIZE         = (1UL << PAGE_SIZE_LOG2),
+		UTCB_SIZE      = sizeof(Native_utcb),
+		PAGE_SIZE_LOG2 = 12,
+		PAGE_SIZE      = (1UL << PAGE_SIZE_LOG2),
 	};
 	addr_t const stack_slot_base = Stack_allocator::addr_to_base(this);
 	size_t const ds_size = align_addr(size - stack_size, PAGE_SIZE_LOG2);
@@ -160,7 +159,7 @@ void Thread_base::name(char *dst, size_t dst_len)
 void Thread_base::join() { _join_lock.lock(); }
 
 
-void* Thread_base::alloc_secondary_stack(char const *name, size_t stack_size)
+void *Thread_base::alloc_secondary_stack(char const *name, size_t stack_size)
 {
 	Stack *stack = _alloc_stack(stack_size, name, false);
 	return (void *)stack->top();
@@ -213,7 +212,7 @@ Thread_base::Thread_base(size_t weight, const char *name, size_t stack_size,
 	_affinity(affinity),
 	_trace_control(nullptr),
 	_stack(type == REINITIALIZED_MAIN ?
-	         _stack : _alloc_stack(stack_size, name, type == MAIN)),
+	       _stack : _alloc_stack(stack_size, name, type == MAIN)),
 	_join_lock(Lock::LOCKED)
 {
 	_init_platform_thread(weight, type);

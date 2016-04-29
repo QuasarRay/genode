@@ -1,6 +1,5 @@
 /*
- * \brief  Generic implementation parts of the signaling framework which are
- *         implemented platform specifically, e.g. base-hw and base-nova.
+ * \brief  Generic implementation parts of the signaling framework
  * \author Norman Feske
  * \author Alexander Boettcher
  */

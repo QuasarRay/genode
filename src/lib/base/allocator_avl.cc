@@ -258,7 +258,6 @@ int Allocator_avl_base::remove_range(addr_t base, size_t size)
 			return !b ? 0 : -3;
 		}
 
-
 		/* cut intersecting address range */
 		addr_t intersect_beg = max(base, b->addr());
 		size_t intersect_end = min(base + size - 1, b->addr() + b->size() - 1);
@@ -270,7 +269,9 @@ int Allocator_avl_base::remove_range(addr_t base, size_t size)
 }
 
 
-Range_allocator::Alloc_return Allocator_avl_base::alloc_aligned(size_t size, void **out_addr, int align, addr_t from, addr_t to)
+Range_allocator::Alloc_return
+Allocator_avl_base::alloc_aligned(size_t size, void **out_addr, int align,
+                                  addr_t from, addr_t to)
 {
 	Block *dst1, *dst2;
 	if (!_alloc_two_blocks_metadata(&dst1, &dst2))
@@ -320,8 +321,7 @@ Range_allocator::Alloc_return Allocator_avl_base::alloc_addr(size_t size, addr_t
 	b = b ? b->find_by_address(addr, size) : 0;
 
 	/* skip if there's no block or block is used */
-	if (!b || b->used())
-	{
+	if (!b || b->used()) {
 		_md_alloc->free(dst1, sizeof(Block));
 		_md_alloc->free(dst2, sizeof(Block));
 		return Alloc_return(Alloc_return::RANGE_CONFLICT);
@@ -390,9 +390,7 @@ Allocator_avl_base::Block *Allocator_avl_base::_find_any_used_block(Block *sub_t
 bool Allocator_avl_base::any_block_addr(addr_t *out_addr)
 {
 	Block * const b = _find_any_used_block(_addr_tree.first());
-
 	*out_addr = b ? b->addr() : 0;
-
 	return b != nullptr;
 }
 
