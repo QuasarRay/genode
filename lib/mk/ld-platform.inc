@@ -1,6 +1,8 @@
 SHARED_LIB = yes
 DIR        = $(BASE_DIR)/src/lib/ldso
 
+LIB_IS_DYNAMIC_LINKER = yes
+
 include $(BASE_DIR)/mk/base-libs.mk
 
 LIBS         = $(BASE_LIBS)
