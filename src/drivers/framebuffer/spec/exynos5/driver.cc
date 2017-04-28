@@ -19,7 +19,7 @@
 #include <irq_session/connection.h>
 #include <regulator_session/connection.h>
 #include <os/attached_mmio.h>
-#include <drivers/board_base.h>
+#include <drivers/defs/exynos5.h>
 
 using namespace Genode;
 
@@ -357,7 +357,7 @@ class Video_mixer : public Attached_mmio
 		 * Constructor
 		 */
 		Video_mixer(Genode::Env &env)
-		: Attached_mmio(env, Genode::Board_base::MIXER_BASE, 0x10000) { }
+		: Attached_mmio(env, Exynos5::MIXER_BASE, 0x10000) { }
 
 		/**
 		 * Initialize mixer for displaying one graphical input fullscreen
@@ -513,8 +513,8 @@ class I2c_hdmi : public I2c_interface
 		 * Constructor
 		 */
 		I2c_hdmi(Genode::Env &env, Mmio::Delayer &delayer)
-		: I2c_interface(env, Genode::Board_base::I2C_BASE,
-		                Genode::Board_base::I2C_HDMI_IRQ, delayer),
+		: I2c_interface(env, Exynos5::I2C_BASE,
+		                Exynos5::I2C_HDMI_IRQ, delayer),
 			_delayer(delayer)
 		{ }
 
@@ -901,7 +901,7 @@ class Hdmi : public Attached_mmio
 		 * Constructor
 		 */
 		Hdmi(Genode::Env &env, Mmio::Delayer &delayer)
-		: Attached_mmio(env, Genode::Board_base::HDMI_BASE, 0xa0000),
+		: Attached_mmio(env, Exynos5::HDMI_BASE, 0xa0000),
 			_i2c_hdmi(env, delayer), _delayer(delayer)
 		{ }
 

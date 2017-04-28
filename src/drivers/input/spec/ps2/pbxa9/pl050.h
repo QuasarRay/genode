@@ -14,9 +14,6 @@
 #ifndef _DRIVERS__INPUT__SPEC__PS2__PL050__PL050_H_
 #define _DRIVERS__INPUT__SPEC__PS2__PL050__PL050_H_
 
-/* platform includes */
-#include <pl050_defs.h>
-
 /* Genode includes */
 #include <os/ring_buffer.h>
 #include <base/attached_io_mem_dataspace.h>
@@ -126,12 +123,13 @@ class Pl050
 
 	public:
 
-		/**
-		 * Constructor
-		 */
-		Pl050(Genode::Env &env) :
-			_kbd(env, PL050_KEYBD_PHYS, PL050_KEYBD_SIZE),
-			_aux(env, PL050_MOUSE_PHYS, PL050_MOUSE_SIZE)
+		Pl050(Genode::Env &env,
+		      Genode::addr_t keyb_mmio_base,
+		      Genode::size_t keyb_mmio_size,
+		      Genode::addr_t mouse_mmio_base,
+		      Genode::size_t mouse_mmio_size) :
+			_kbd(env, keyb_mmio_base, keyb_mmio_size),
+			_aux(env, mouse_mmio_base, mouse_mmio_size)
 		{
 			_kbd.enable_irq();
 			_aux.enable_irq();

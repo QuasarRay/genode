@@ -1,3 +1,3 @@
-REQUIRES = exynos5
+REQUIRES = arndale
 
 include $(REP_DIR)/src/drivers/uart/target.inc

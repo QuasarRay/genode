@@ -18,8 +18,9 @@
 /* local includes */
 #include <os/attached_mmio.h>
 #include <block/driver.h>
-#include <pl180_defs.h>
 #include <timer_session/connection.h>
+
+#include "board.h"
 
 namespace Sd_card {
 

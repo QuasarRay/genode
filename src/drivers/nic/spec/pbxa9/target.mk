@@ -1,4 +1,4 @@
-REQUIRES = lan9118
+REQUIRES = pbxa9
 TARGET   = nic_drv
 SRC_CC   = main.cc
 LIBS     = base

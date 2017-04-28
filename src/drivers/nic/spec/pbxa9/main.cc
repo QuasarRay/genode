@@ -21,9 +21,7 @@
 #include <base/heap.h>
 #include <nic/component.h>
 #include <root/component.h>
-
-/* device definitions */
-#include <lan9118_defs.h>
+#include <drivers/defs/pbxa9.h>
 
 /* driver code */
 #include <lan9118.h>
@@ -31,6 +29,27 @@
 class Root : public Genode::Root_component<Lan9118, Genode::Single_client>
 {
 	private:
+
+		enum {
+
+			/**
+			 * Base address of MMIO resource
+			 */
+			LAN9118_PHYS = 0x4e000000,
+
+			/**
+			 * Size of MMIO resource
+			 *
+			 * On the RealView platform, the device spans actually a much larger
+			 * resource. However, only the first page is used.
+			 */
+			LAN9118_SIZE = 0x1000,
+
+			/**
+			 * Interrupt line
+			 */
+			LAN9118_IRQ = Pbxa9::ETHERNET_IRQ,
+		};
 
 		Genode::Env &_env;
 
@@ -81,4 +100,3 @@ void Component::construct(Genode::Env &env)
 	Genode::log("--- LAN9118 NIC driver started ---");
 	env.parent().announce(env.ep().manage(nic_root));
 }
-

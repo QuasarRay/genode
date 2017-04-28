@@ -14,7 +14,7 @@
 #ifndef _INCLUDE__SPEC__PBXA9__PL180_DEFS_H_
 #define _INCLUDE__SPEC__PBXA9__PL180_DEFS_H_
 
-#include <drivers/board_base.h>
+#include <drivers/defs/pbxa9.h>
 
 enum {
 	PL180_PHYS = 0x10005000, PL180_SIZE = 0x1000,
@@ -22,8 +22,8 @@ enum {
 	/**
 	 * Interrupt lines
 	 */
-	PL180_IRQ0 = Genode::Board_base::PL180_IRQ_0,
-	PL180_IRQ1 = Genode::Board_base::PL180_IRQ_1,
+	PL180_IRQ0 = Pbxa9::PL180_IRQ_0,
+	PL180_IRQ1 = Pbxa9::PL180_IRQ_1,
 };
 
 #endif /* _INCLUDE__SPEC__PBXA9__PL180_DEFS_H_ */

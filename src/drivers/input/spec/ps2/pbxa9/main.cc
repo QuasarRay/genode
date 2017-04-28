@@ -14,6 +14,7 @@
 /* Genode includes */
 #include <base/component.h>
 #include <base/attached_rom_dataspace.h>
+#include <drivers/defs/pbxa9.h>
 #include <input/component.h>
 #include <input/root.h>
 
@@ -30,7 +31,17 @@ struct Ps2::Main
 {
 	Genode::Env &_env;
 
-	Pl050                    _pl050 { _env };
+	enum {
+		PL050_KEYBD_PHYS = 0x10006000,
+		PL050_KEYBD_SIZE = 0x1000,
+		PL050_MOUSE_PHYS = 0x10007000,
+		PL050_MOUSE_SIZE = 0x1000,
+		PL050_KEYBD_IRQ = Pbxa9::KMI_0_IRQ,
+		PL050_MOUSE_IRQ = Pbxa9::KMI_1_IRQ,
+	};
+
+	Pl050                    _pl050 { _env, PL050_KEYBD_PHYS, PL050_KEYBD_SIZE,
+	                                  PL050_MOUSE_PHYS, PL050_MOUSE_SIZE };
 	Input::Session_component _session { _env, _env.ram() };
 	Input::Root_component    _root { _env.ep().rpc_ep(), _session };
 

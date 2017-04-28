@@ -1,5 +1,5 @@
 TARGET   = ps2_drv
-REQUIRES = pl050
+REQUIRES = pbxa9
 SRC_CC   = main.cc
 LIBS     = base
 
