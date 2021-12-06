@@ -12,7 +12,6 @@
  */
 
 #include <base/component.h>
-#include <env.h>
 #include <root.h>
 
 namespace Driver { struct Main; };
@@ -21,25 +20,29 @@ struct Driver::Main
 {
 	void update_config();
 
-	Driver::Env          env;
-	Signal_handler<Main> config_handler { env.env.ep(), *this,
+	Env                  & env;
+	Heap                   heap           { env.ram(), env.rm() };
+	Sliced_heap            sliced_heap    { env.ram(), env.rm() };
+	Attached_rom_dataspace config         { env, "config"       };
+	Device_model           devices        { heap                };
+	Signal_handler<Main>   config_handler { env.ep(), *this,
 	                                      &Main::update_config };
-	Driver::Root         root           { env };
+	Driver::Root           root           { env, sliced_heap, config, devices };
 
 	Main(Genode::Env & e)
 	: env(e)
 	{
-		env.devices.update(env.config.xml());
-		env.config.sigh(config_handler);
-		env.env.parent().announce(env.env.ep().manage(root));
+		devices.update(config.xml());
+		config.sigh(config_handler);
+		env.parent().announce(env.ep().manage(root));
 	}
 };
 
 
 void Driver::Main::update_config()
 {
-	env.config.update();
-	env.devices.update(env.config.xml());
+	config.update();
+	devices.update(config.xml());
 	root.update_policy();
 }
 
