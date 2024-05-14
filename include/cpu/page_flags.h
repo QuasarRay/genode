@@ -11,8 +11,8 @@
  * under the terms of the GNU Affero General Public License version 3.
  */
 
-#ifndef _INCLUDE__SPEC__X86_64__PAGE_TABLE__PAGE_FLAGS_H_
-#define _INCLUDE__SPEC__X86_64__PAGE_TABLE__PAGE_FLAGS_H_
+#ifndef _INCLUDE__CPU__PAGE_FLAGS_H_
+#define _INCLUDE__CPU__PAGE_FLAGS_H_
 
 #include <base/cache.h>
 #include <base/output.h>
@@ -71,4 +71,4 @@ namespace Genode {
 		{ RW, NO_EXEC, USER, NO_GLOBAL, RAM, Genode::CACHED   };
 }
 
-#endif /* _INCLUDE__SPEC__X86_64__PAGE_TABLE__PAGE_FLAGS_H_ */
+#endif /* _INCLUDE__CPU__PAGE_FLAGS_H_ */
