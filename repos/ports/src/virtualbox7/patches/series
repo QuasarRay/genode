@@ -29,3 +29,4 @@ ich9.patch
 ohci.patch
 sharedclipboard.patch
 log.patch
+svga_obsolete_commands.patch

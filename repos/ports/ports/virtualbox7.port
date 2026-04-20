@@ -1,17 +1,17 @@
 LICENSE         := GPLv3
-VERSION         := 7.2.14
+VERSION         := 7.2.22
 DOWNLOADS       := virtualbox.archive virtualbox_sdk.archive
 
 VIRTUALBOX_TBZ2    := VirtualBox-$(VERSION).tar.bz2
-VIRTUALBOX_SDK_ZIP := VirtualBoxSDK-$(VERSION)-174565.zip
+VIRTUALBOX_SDK_ZIP := VirtualBoxSDK-$(VERSION)-175245.zip
 
-URL(virtualbox) := http://download.virtualbox.org/virtualbox/$(VERSION)/$(VIRTUALBOX_TBZ2)
+URL(virtualbox) := https://download.virtualbox.org/virtualbox/$(VERSION)/$(VIRTUALBOX_TBZ2)
 DIR(virtualbox) := src/virtualbox7
-SHA(virtualbox) := 384f293184c52fd51bc941c17d753b4019446f53a6b07c828adfb3e61fe0a500
+SHA(virtualbox) := 440a2b3eeb46e7e992961b70ef24f43e95b3c99fa2ab30aac20b963ef9e91ad7
 
-URL(virtualbox_sdk) := http://download.virtualbox.org/virtualbox/$(VERSION)/$(VIRTUALBOX_SDK_ZIP)
+URL(virtualbox_sdk) := https://download.virtualbox.org/virtualbox/$(VERSION)/$(VIRTUALBOX_SDK_ZIP)
 DIR(virtualbox_sdk) := src/virtualbox7_sdk
-SHA(virtualbox_sdk) := 7f388e22957f126535df297a3a6f258b293a39b73548485ba3257141175a3189
+SHA(virtualbox_sdk) := 9fd2d4b60cd4b5ec4078962624336ae7e8f76c39d788025038be3c5e85e03152
 
 PATCHES_DIR := src/virtualbox7/patches
 PATCHES     := $(addprefix $(PATCHES_DIR)/, $(shell cat $(REP_DIR)/$(PATCHES_DIR)/series))
@@ -163,9 +163,9 @@ VBOX_CONTENT += $(addprefix include/VBox/com/, $(VBOX_INC_COM))
 VBOX_CONTENT += include/VBox/HostServices/
 VBOX_CONTENT += include/VBox/GuestHost/
 
-VBOX_CONTENT += src/libs/zlib-1.3.2 src/libs/liblzf-3.6 src/libs/libxml2-2.15.3
+VBOX_CONTENT += src/libs/zlib-1.3.2 src/libs/liblzf-3.6 src/libs/libxml2-2.15.4
 VBOX_CONTENT += src/libs/softfloat-3e src/libs/xpcom18a4
-VBOX_CONTENT += src/libs/libtpms-0.10.2 src/libs/openssl-3.4.6
+VBOX_CONTENT += src/libs/libtpms-0.10.2 src/libs/openssl-3.5.8
 VBOX_CONTENT += include/VBox/vmm include/iprt Version.kmk
 VBOX_CONTENT += COPYING
 

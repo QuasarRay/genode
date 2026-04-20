@@ -1,0 +1,49 @@
+This partly reverts the "7.2: backported r174772: Devices/Graphics: disable
+obsolete commands and check resolution." commit in order to keep the VBoxSVGA
+display controller working for Linux guests. This is just an interim solution,
+medium-term all Linux guests will have to switch to VMSVGA.
+
+--- src/virtualbox7/src/VBox/Devices/Graphics/DevVGA.cpp
++++ src/virtualbox7/src/VBox/Devices/Graphics/DevVGA.cpp
+@@ -4926,13 +4926,10 @@ static DECLCALLBACK(int) vgaR3PortUpdateDisplay(PPDMIDISPLAYPORT pInterface)
+ # ifndef VBOX_WITH_HGSMI
+     /* This should be called only in non VBVA mode. */
+ # else
+-    if (!pThis->fVMSVGAEnabled)
++    if (VBVAUpdateDisplay(pThis, pThisCC) == VINF_SUCCESS)
+     {
+-        if (VBVAUpdateDisplay(pThis, pThisCC) == VINF_SUCCESS)
+-        {
+-            PDMDevHlpCritSectLeave(pDevIns, &pThis->CritSect);
+-            return VINF_SUCCESS;
+-        }
++        PDMDevHlpCritSectLeave(pDevIns, &pThis->CritSect);
++        return VINF_SUCCESS;
+     }
+ # endif /* VBOX_WITH_HGSMI */
+ 
+--- src/virtualbox7/src/VBox/Devices/Graphics/DevVGA_VBVA.cpp
++++ src/virtualbox7/src/VBox/Devices/Graphics/DevVGA_VBVA.cpp
+@@ -1552,22 +1552,6 @@ static DECLCALLBACK(int) vbvaChannelHandler(void *pvHandler, uint16_t u16Channel
+     PHGSMIINSTANCE  pIns    = pThisCC->pHGSMI;
+     VBVACONTEXT    *pCtx    = (VBVACONTEXT *)HGSMIContext(pIns);
+ 
+-    if (pThis->fVMSVGAEnabled)
+-    {
+-        if (   u16ChannelInfo == VBVA_QUERY_CONF32
+-            || u16ChannelInfo == VBVA_INFO_HEAP
+-            || u16ChannelInfo == VBVA_MOUSE_POINTER_SHAPE
+-            || u16ChannelInfo == VBVA_INFO_CAPS
+-            || u16ChannelInfo == VBVA_CURSOR_POSITION
+-           )
+-        { /* allowed */ }
+-        else
+-        {
+-           /* NOPs for VMSVGA mode. */
+-           return VINF_SUCCESS;
+-        }
+-    }
+-
+     switch (u16ChannelInfo)
+     {
+ #ifdef VBOX_WITH_VDMA

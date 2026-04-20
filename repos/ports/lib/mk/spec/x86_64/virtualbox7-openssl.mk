@@ -176,7 +176,9 @@ CRYPTO_SRC_EVP = \
 	pmeth_check.c \
 	pmeth_gn.c \
 	pmeth_lib.c \
-	signature.c
+	signature.c \
+	skeymgmt_meth.c \
+	s_lib.c
 
 CRYPTO_SRC_ROOT = \
 	asn1_dsa.c \
@@ -512,12 +514,16 @@ CRYPTO_SRC_X509 = \
 	t_crl.c \
 	t_req.c \
 	t_x509.c \
+	v3_aaa.c \
 	v3_ac_tgt.c \
 	v3_addr.c \
 	v3_admis.c \
 	v3_akeya.c \
 	v3_akid.c \
+	v3_attrdesc.c \
+	v3_attrmap.c \
 	v3_audit_id.c \
+	v3_authattid.c \
 	v3_asid.c \
 	v3_battcons.c \
 	v3_bcons.c \
@@ -546,12 +552,14 @@ CRYPTO_SRC_X509 = \
 	v3_pmaps.c \
 	v3_prn.c \
 	v3_purp.c \
+	v3_rolespec.c \
 	v3_san.c \
 	v3_sda.c \
 	v3_single_use.c \
 	v3_skid.c \
 	v3_soa_id.c \
 	v3_sxnet.c \
+	v3_timespec.c \
 	v3_tlsf.c \
 	v3_usernotice.c \
 	v3_utf8.c \
@@ -833,14 +841,6 @@ CRYPTO_SRC_BF = \
 CRYPTO_SRC_ASYNC = \
 	async_err.c
 
-#CRYPTO_SRC_ASYNC = \
-	arch/async_null.c \
-	arch/async_posix.c \
-	arch/async_win.c \
-	async.c \
-	async_err.c \
-	async_wait.c
-
 CRYPTO_SRC_CMAC = \
 	cmac.c
 
@@ -851,9 +851,6 @@ CRYPTO_SRC_COMP = \
 	c_zlib.c \
 	comp_err.c \
 	comp_lib.c
-
-#	c_brotli.c \
-#	c_zstd.c \
 
 CRYPTO_SRC_SRP = \
 	srp_lib.c \
@@ -878,12 +875,20 @@ CRYPTO_SRC_TS = \
 	ts_rsp_verify.c \
 	ts_verify_ctx.c
 
+CRYPTO_SRC_ML_DSA = \
+	ml_dsa_encoders.c \
+	ml_dsa_key.c \
+	ml_dsa_key_compress.c \
+	ml_dsa_matrix.c \
+	ml_dsa_ntt. \
+	ml_dsa_params.c \
+	ml_dsa_sample.c \
+
 SRC_PROVIDERS = \
 	prov_running.c \
 	baseprov.c \
 	defltprov.c \
 	nullprov.c
-#	legacyprov.c
 
 PROVIDERS_KEM = \
 	ec_kem.c \
@@ -997,7 +1002,8 @@ PROVIDERS_KMGMT = \
 	ecx_kmgmt.c \
 	kdf_legacy_kmgmt.c \
 	mac_legacy_kmgmt.c \
-	rsa_kmgmt.c
+	ml_dsa_kmgmt.c \
+	rsa_kmgmt.c \
 
 PROVIDERS_EXCHANGE = \
 	dh_exch.c \
@@ -1016,7 +1022,9 @@ PROVIDERS_ENCODE_DECODE = \
 	encode_key2blob.c \
 	encode_key2ms.c \
 	encode_key2text.c \
-	endecoder_common.c
+	endecoder_common.c \
+	ml_common_codecs.c \
+
 
 PROVIDERS_MACS = \
 	blake2b_mac.c \
@@ -1062,6 +1070,10 @@ PROVIDERS_COMMON_DER = \
 	der_rsa_sig.c \
 	der_sm2_key.c \
 	der_sm2_sig.c
+
+PROVIDERS_SKEYMGMT = \
+	aes_skmgmt.c \
+	generic.c
 
 GEN_SOURCES_DER = \
 	der_digests_gen.c \
@@ -1124,44 +1136,69 @@ SRC_SSL = \
 	tls_srp.c
 
 SRC_SSL_QUIC = \
-	quic_impl.c \
-	quic_method.c \
-	quic_wire.c quic_ackm.c quic_statm.c \
-	cc_newreno.c quic_demux.c quic_record_rx.c \
-	quic_record_tx.c quic_record_util.c quic_record_shared.c quic_wire_pkt.c \
-	quic_rx_depack.c \
-	quic_fc.c uint_set.c \
-	quic_cfq.c quic_txpim.c quic_fifd.c quic_txp.c \
-	quic_stream_map.c \
-	quic_sf_list.c quic_rstream.c quic_sstream.c \
-	quic_reactor.c \
-	quic_channel.c quic_port.c quic_engine.c \
-	quic_tserver.c \
-	quic_tls.c \
-	quic_thread_assist.c \
-	quic_trace.c \
-	quic_srtm.c quic_srt_gen.c \
-	quic_lcidm.c quic_rcidm.c \
-	quic_types.c \
+	cc_newreno.c \
+	json_enc.c \
+	qlog.c \
 	qlog_event_helpers.c \
-	qlog.c json_enc.c
+	quic_ackm.c \
+	quic_cfq.c \
+	quic_channel.c \
+	quic_demux.c \
+	quic_engine.c \
+	quic_fc.c \
+	quic_fifd.c \
+	quic_impl.c \
+	quic_lcidm.c \
+	quic_method.c \
+	quic_obj.c \
+	quic_port.c \
+	quic_rcidm.c \
+	quic_reactor.c \
+	quic_reactor_wait_ctx.c \
+	quic_record_rx.c \
+	quic_record_shared.c \
+	quic_record_tx.c \
+	quic_record_util.c \
+	quic_rstream.c \
+	quic_rx_depack.c \
+	quic_sf_list.c \
+	quic_srt_gen.c \
+	quic_srtm.c \
+	quic_sstream.c \
+	quic_statm.c \
+	quic_stream_map.c \
+	quic_thread_assist.c \
+	quic_tls.c \
+	quic_trace.c \
+	quic_tserver.c \
+	quic_txp.c \
+	quic_txpim.c \
+	quic_types.c \
+	quic_wire.c \
+	quic_wire_pkt.c \
+	uint_set
+
+SRC_SSL_RIO = \
+	rio_notifier.c
 
 SRC_S += crypto/genasm-elf/ecp_nistz256-x86_64.S
 
 SRC_C += gen-sources/crypto/params_idx.c
 SRC_C += $(addprefix gen-sources/der/, $(GEN_SOURCES_DER))
 
+SRC_C += crypto/hashtable/hashfunc.c
 SRC_C += crypto/hashtable/hashtable.c
 SRC_C += crypto/hmac/hmac.c
-SRC_C += crypto/txt_db/txt_db.c
 SRC_C += crypto/stack/stack.c
 SRC_C += crypto/thread/api.c
 SRC_C += crypto/thread/arch.c
-SRC_C += crypto/thread/internal.c
 SRC_C += crypto/thread/arch/thread_posix.c
+SRC_C += crypto/thread/internal.c
+SRC_C += crypto/txt_db/txt_db.c
 
 SRC_C += $(addprefix ssl/,      $(SRC_SSL))
 SRC_C += $(addprefix ssl/quic/, $(SRC_SSL_QUIC))
+SRC_C += $(addprefix ssl/rio/,  $(SRC_SSL_RIO))
 
 INC_DIR += $(VIRTUALBOX_DIR)/src/VBox/Devices/EFI/Firmware/CryptoPkg/Library/OpensslLib
 
@@ -1204,6 +1241,7 @@ SRC_C += $(addprefix crypto/lhash/,         $(CRYPTO_SRC_LHASH))
 SRC_C += $(addprefix crypto/md2/,           $(CRYPTO_SRC_MD2))
 SRC_C += $(addprefix crypto/md5/,           $(CRYPTO_SRC_MD5))
 SRC_C += $(addprefix crypto/mdc2/,          $(CRYPTO_SRC_MDC2))
+SRC_C += $(addprefix crypto/ml_dsa/,        $(CRYPTO_SRC_ML_DSA))
 SRC_C += $(addprefix crypto/modes/,         $(CRYPTO_SRC_MODES))
 SRC_C += $(addprefix crypto/objects/,       $(CRYPTO_SRC_OBJECTS))
 SRC_C += $(addprefix crypto/ocsp/,          $(CRYPTO_SRC_OCSP))
@@ -1238,6 +1276,7 @@ SRC_C += $(addprefix providers/implementations/keymgmt/,       $(PROVIDERS_KMGMT
 SRC_C += $(addprefix providers/implementations/macs/,          $(PROVIDERS_MACS))
 SRC_C += $(addprefix providers/implementations/rands/,         $(PROVIDERS_RANDS))
 SRC_C += $(addprefix providers/implementations/signature/,     $(PROVIDERS_SIGNATURE))
+SRC_C += $(addprefix providers/implementations/skeymgmt/,      $(PROVIDERS_SKEYMGMT))
 
 SRC_C += providers/implementations/storemgmt/file_store.c
 SRC_C += providers/implementations/storemgmt/file_store_any2obj.c
@@ -1245,6 +1284,8 @@ SRC_C += providers/implementations/asymciphers/rsa_enc.c
 
 VBOX_CC_OPT += -DOPENSSLDIR=\"\"
 VBOX_CC_OPT += -DOPENSSL_NO_WINSTORE
+VBOX_CC_OPT += -DOPENSSL_NO_SLH_DSA -DOPENSSL_NO_ML_DSA
+VBOX_CC_OPT += -DOPENSSL_NO_ML_KEM
 VBOX_CC_OPT += -DDSO_DLFCN -DHAVE_DLFCN_H
 
 vpath %.c $(OPENSSL_DIR)
