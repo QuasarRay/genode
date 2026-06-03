@@ -4,7 +4,7 @@ proc binary_name_timer     { } { return "pit_timer"      }
 
 proc kernel_files { } { return okl4 }
 
-proc boot_output { } { return "serial" }
+proc boot_output { } { return "serial=[cmd_arg --serial-ioport 0x3f8]" }
 
 proc grub_menuentry { } { return "'Genode on OKL4'" }
 
@@ -181,7 +181,7 @@ proc run_boot_dir {binaries} {
 		#
 		puts $fh "menuentry [grub_menuentry] {"
 		puts $fh " insmod multiboot"
-		puts $fh " multiboot /boot/bender [boot_output]"
+		puts $fh " multiboot /boot/boloa [boot_output]"
 		puts $fh " module /boot/image.elf"
 		puts $fh "}"
 		close $fh
@@ -204,7 +204,7 @@ proc run_boot_dir {binaries} {
 		set fh [open "[run_dir]/config-52-54-00-12-34-56" "WRONLY CREAT TRUNC"]
 		# load okl4 at 256M to avoid overwritting binary, adjust by need
 		puts $fh " addr 0x10000000"
-		puts $fh " exec /boot/bender [boot_output]"
+		puts $fh " exec /boot/boloa [boot_output]"
 		puts $fh " load /boot/image.elf"
 		close $fh
 

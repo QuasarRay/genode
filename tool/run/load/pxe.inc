@@ -1,3 +1,5 @@
+source [genode_dir]/tool/run/preboot.inc
+
 ##
 # Install files needed to boot via PXE
 #
@@ -9,4 +11,6 @@ proc install_pxe_bootloader_to_run_dir { } {
 	exec chmod a+r [run_dir]/boot/bender
 	exec cp [genode_dir]/tool/boot/unzip [run_dir]/boot/unzip
 	exec chmod a+r [run_dir]/boot/unzip
+
+	prepare_preboot_file
 }

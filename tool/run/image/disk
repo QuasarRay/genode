@@ -8,6 +8,7 @@
 
 source [genode_dir]/tool/run/grub2.inc
 source [genode_dir]/tool/run/shim.inc
+source [genode_dir]/tool/run/preboot.inc
 
 
 proc image_disk_size { } { return [cmd_arg --image-disk_size 0] }
@@ -62,6 +63,7 @@ proc run_image { } {
 	set sgdisk [installed_command sgdisk]
 
 	prepare_grub2_files
+	prepare_preboot_file
 
 	# remove template partition
 	exec $sgdisk --delete=3 [run_dir].header

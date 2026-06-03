@@ -11,9 +11,13 @@ proc binary_name_timer     { } {
 	exit -1
 }
 
-proc kernel_files          { } { return sel4 }
+proc boot_output { } { return "serial=[cmd_arg --serial-ioport 0x3f8]" }
 
-proc boot_output { } { return "serial" }
+proc kernel_files  { } { return sel4 }
+proc kernel_output { } { return "debug_port=[cmd_arg --serial-ioport 0x3f8] console_port=[cmd_arg --serial-ioport 0x3f8]" }
+proc kernel_iommu  { } { return "disable_iommu" }
+
+proc apply_bender  { } { return false }
 
 proc grub_menuentry { } { return "'Genode on seL4'" }
 
@@ -60,7 +64,11 @@ proc run_boot_dir {binaries} {
 
 	exec mv [run_dir]/image.elf [run_dir]/boot/image.elf
 
-	set options_bender "[boot_output] [bender_intel_hwp_mode_option] phys_max=256M"
+	if {[apply_bender]} {
+		set options_bender "[boot_output] [bender_intel_hwp_mode_option] phys_max=256M"
+
+		if {[boot_output] != ""} { append options_bender " serial" }
+	}
 
 	if {[have_include "image/iso"] || [have_include "image/disk"] || [have_include image/uefi]} {
 
@@ -74,7 +82,9 @@ proc run_boot_dir {binaries} {
 
 		if {[have_include image/uefi]} {
 			install_uefi_bootloader_to_run_dir
-			append options_bender " serial_fallback"
+			if {[apply_bender]} {
+				append options_bender " serial_fallback"
+			}
 		}
 
 		#
@@ -84,8 +94,11 @@ proc run_boot_dir {binaries} {
 
 		puts $fh "menuentry [grub_menuentry] {"
 		puts $fh " insmod multiboot2"
-		puts $fh " multiboot2 /boot/bender $options_bender"
-		puts $fh " module2 /boot/sel4 sel4 disable_iommu"
+		puts $fh " multiboot2 /boot/boloa [boot_output]"
+		if {[apply_bender]} {
+			puts $fh " module2 /boot/bender $options_bender"
+		}
+		puts $fh " module2 /boot/sel4 sel4 [kernel_iommu] [kernel_output]"
 		puts $fh " module2 /boot/image.elf image.elf"
 		puts $fh "}"
 		close $fh
@@ -142,8 +155,11 @@ proc run_boot_dir {binaries} {
 		# Generate pulsar config file
 		#
 		set fh [open "[run_dir]/config-52-54-00-12-34-56" "WRONLY CREAT TRUNC"]
-		puts $fh " exec /boot/bender $options_bender"
-		puts $fh " load /boot/sel4 disable_iommu"
+		puts $fh " exec /boot/boloa [boot_output]"
+		if {[apply_bender]} {
+			puts $fh " load /boot/bender $options_bender"
+		}
+		puts $fh " load /boot/sel4 [kernel_iommu] [kernel_output]"
 		puts $fh " load /boot/image.elf"
 		close $fh
 

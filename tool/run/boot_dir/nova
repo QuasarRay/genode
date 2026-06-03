@@ -5,10 +5,10 @@ proc binary_name_core_a    { } { return "core-nova.a" }
 proc binary_name_timer     { } { return "nova_timer" }
 
 proc kernel_files  { } { return hypervisor }
-proc kernel_output { } { return "serial" }
+proc kernel_output { } { return "serial [cmd_arg --serial-ioport 0x3f8]" }
 proc kernel_iommu  { } { return "iommu_intel iommu_amd" }
 
-proc boot_output { } { return "serial" }
+proc boot_output { } { return "serial=[cmd_arg --serial-ioport 0x3f8]" }
 
 proc grub_menuentry { } { return "'Genode on NOVA'" }
 
@@ -17,6 +17,7 @@ proc run_boot_string { } {
 }
 
 proc apply_microcode { } { return false }
+proc apply_bender    { } { return false }
 
 proc core_link_address { } { return "0x100000" }
 
@@ -65,14 +66,19 @@ proc run_boot_dir {binaries} {
 
 	exec mv [run_dir]/image.elf [run_dir]/boot/image.elf
 
-	#
-	# Setup bender options, e.g. serial and applying Intel HWP mode
-	#
-	set options_bender "[boot_output] [bender_intel_hwp_mode_option]"
+	if {[apply_bender]} {
+		#
+		# Setup bender options, e.g. serial and applying Intel HWP mode
+		#
+		set options_bender "[boot_output] [bender_intel_hwp_mode_option]"
 
-	if {[apply_microcode]} {
-		exec cp bin/micro.code [run_dir]/boot/
-		append options_bender " microcode"
+		if {[boot_output] != ""} { append options_bender " serial" }
+
+		if {[apply_microcode]} {
+			exec cp bin/micro.code [run_dir]/boot/
+			append options_bender " microcode"
+		}
+
 	}
 
 	if {[have_include "image/iso"] || [have_include "image/disk"] || [have_include image/uefi]} {
@@ -91,7 +97,9 @@ proc run_boot_dir {binaries} {
 
 		if {[have_include image/uefi]} {
 			install_uefi_bootloader_to_run_dir
-			append options_bender " serial_fallback"
+			if {[apply_bender]} {
+				append options_bender " serial_fallback"
+			}
 		}
 
 		#
@@ -102,7 +110,10 @@ proc run_boot_dir {binaries} {
 		puts $fh "menuentry [grub_menuentry] {"
 		puts $fh " insmod multiboot2"
 		puts $fh " insmod gzio"
-		puts $fh " multiboot2 /boot/bender $options_bender"
+		puts $fh " multiboot2 /boot/boloa [boot_output]"
+		if {[apply_bender]} {
+			puts $fh " module2 /boot/bender $options_bender"
+		}
 		if {[apply_microcode]} {
 			puts $fh " module2 /boot/micro.code micro.code"
 		}
@@ -127,7 +138,10 @@ proc run_boot_dir {binaries} {
 		# Generate pulsar config file
 		#
 		set fh [open "[run_dir]/config-52-54-00-12-34-56" "WRONLY CREAT TRUNC"]
-		puts $fh " exec /boot/bender $options_bender"
+		puts $fh " exec /boot/boloa [boot_output]"
+		if {[apply_bender]} {
+			puts $fh " load /boot/bender $options_bender"
+		}
 		if {[apply_microcode]} {
 			puts $fh " load /boot/micro.code micro.code"
 		}

@@ -25,6 +25,7 @@ assert {[file exists bin/micro.code]} {
 }
 
 proc apply_microcode { } { return true }
+proc apply_bender    { } { return true }
 
 build { core lib/ld init test/microcode }
 

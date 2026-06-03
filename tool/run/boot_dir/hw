@@ -8,10 +8,11 @@ proc binary_name_image_elf { } { return "image-hw.elf" }
 
 proc run_boot_string { } { return "\nkernel initialized" }
 
-proc boot_output { } { return "serial" }
+proc boot_output { } { return "serial=[cmd_arg --serial-ioport 0x3f8]" }
 
 proc grub_menuentry { } { return "'Genode on base-hw'" }
 
+proc apply_bender { } { return false }
 
 proc bootstrap_link_address { } {
 
@@ -107,7 +108,11 @@ proc run_boot_dir {binaries} {
 	exec mkdir -p [run_dir]/boot
 	exec mv [run_dir]/image-hw.elf [run_dir]/boot/image-hw.elf
 
-	set options_bender "[boot_output] [bender_intel_hwp_mode_option]"
+	if {[apply_bender]} {
+		set options_bender "[boot_output] [bender_intel_hwp_mode_option]"
+
+		if {[boot_output] != ""} { append options_bender " serial" }
+	}
 
 	if {[have_include "image/iso"] || [have_include "image/disk"] || [have_include image/uefi]} {
 		#
@@ -125,7 +130,9 @@ proc run_boot_dir {binaries} {
 
 		if {[have_include image/uefi]} {
 			install_uefi_bootloader_to_run_dir
-			append options_bender " serial_fallback"
+			if {[apply_bender]} {
+				append options_bender " serial_fallback"
+			}
 		}
 
 		#
@@ -135,7 +142,10 @@ proc run_boot_dir {binaries} {
 
 		puts $fh "menuentry [grub_menuentry] {"
 		puts $fh " insmod multiboot2"
-		puts $fh " multiboot2 /boot/bender $options_bender"
+		puts $fh " multiboot2 /boot/boloa [boot_output]"
+		if {[apply_bender]} {
+			puts $fh " module2 /boot/bender $options_bender"
+		}
 		puts $fh " module2 /boot/image-hw.elf.gz image-hw.elf"
 		puts $fh "}"
 		close $fh
@@ -170,7 +180,10 @@ proc run_boot_dir {binaries} {
 		# Generate pulsar config file
 		#
 		set fh [open "[run_dir]/config-52-54-00-12-34-56" "WRONLY CREAT TRUNC"]
-		puts $fh " exec /boot/bender $options_bender"
+		puts $fh " exec /boot/boloa [boot_output]"
+		if {[apply_bender]} {
+			puts $fh " load /boot/bender $options_bender"
+		}
 		puts $fh " load /boot/image-hw.elf"
 		close $fh
 
