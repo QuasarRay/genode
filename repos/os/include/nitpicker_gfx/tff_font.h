@@ -142,17 +142,11 @@ class Tff_font : public Text_painter::Font
 
 	public:
 
-		struct Invalid_format            : Genode::Exception { };
-		struct Insufficient_glyph_buffer : Genode::Exception { };
-
 		/**
 		 * Constructor
 		 *
 		 * \param tff           font data
 		 * \param glyph_buffer  buffer for rendered glyph
-		 *
-		 * \throw Invalid_format
-		 * \throw Insufficient_glyph_buffer
 		 *
 		 * The 'glyph_buffer' should be dimensioned via 'glyph_buffer_size()'.
 		 */
@@ -161,10 +155,10 @@ class Tff_font : public Text_painter::Font
 			_buf(glyph_buffer), _tff(tff)
 		{
 			if (_tff.img_h < 1 || _tff.img_w < 1)
-				throw Invalid_format();
+				Genode::raise(Genode::Unexpected_error::INDEX_OUT_OF_BOUNDS);
 
 			if (_buf.size < glyph_buffer_size(tff))
-				throw Insufficient_glyph_buffer();
+				Genode::raise(Genode::Unexpected_error::INDEX_OUT_OF_BOUNDS);
 
 			for (unsigned i = 0; i < NUM_GLYPHS; i++)
 				_vertical_metrics[i] = _tff.vertical_metrics((unsigned char)i);
