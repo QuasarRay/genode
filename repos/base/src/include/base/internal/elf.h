@@ -126,9 +126,11 @@ class Genode::Elf_segment
 		Elf_segment() { }
 
 		Elf_segment(const Elf_binary *elf, void *start, size_t file_offset,
-		            size_t file_size, size_t mem_size, Elf_binary::Flags flags)
+		            size_t file_size, size_t mem_size, Elf_binary::Flags flags,
+		            uint64_t p_start = 0)
 		: _elf(elf), _start((unsigned char *)start), _file_offset(file_offset),
-		  _file_size(file_size), _mem_size(mem_size), _flags(flags)
+		  _file_size(file_size), _mem_size(mem_size), _flags(flags),
+		  _phys_start(p_start)
 		{
 			_valid = elf ? true : false;
 		}
@@ -139,6 +141,7 @@ class Genode::Elf_segment
 		size_t        file_size() { return _file_size; }
 		size_t         mem_size() { return _mem_size; }
 		Elf_binary::Flags flags() { return _flags; }
+		uint64_t     phys_start() { return _phys_start; }
 
 		/**
 		 * Check validity
@@ -154,6 +157,7 @@ class Genode::Elf_segment
 		size_t            _file_size   { 0 };
 		size_t            _mem_size    { 0 };
 		Elf_binary::Flags _flags       { };
+		uint64_t          _phys_start  { };
 };
 
 #endif /* _INCLUDE__BASE__ELF_H_ */
