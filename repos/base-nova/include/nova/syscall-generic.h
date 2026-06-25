@@ -102,7 +102,8 @@ namespace Nova {
 				AVAILABLE_MEMORY    =  1,
 				RESERVED_MEMORY     =  2,
 				ACPI_RECLAIM_MEMORY =  3,
-				ACPI_NVS_MEMORY     =  4
+				ACPI_NVS_MEMORY     =  4,
+				PREBOOT_MEMORY      =  0xaffe,
 			};
 
 			uint64_t const addr;

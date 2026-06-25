@@ -516,8 +516,10 @@ Core::Platform::Platform()
 			warning("unable to exclude RAM range ", Hex_range(start, num_bytes));
 	};
 
-	addr_t hyp_log = 0;
-	size_t hyp_log_size = 0;
+	struct Range { addr_t start; addr_t size; };
+
+	Range preboot { };
+	Range hyp_log { };
 
 	/*
 	 * Exclude all non-available memory from physical allocator AFTER all
@@ -528,10 +530,11 @@ Core::Platform::Platform()
 	for (unsigned i = 0; i < num_mem_desc; i++, mem_desc++) {
 		if (mem_desc->type == Hip::Mem_desc::AVAILABLE_MEMORY) continue;
 
-		if (mem_desc->type == Hip::Mem_desc::HYPERVISOR_LOG) {
-			hyp_log      = (addr_t)mem_desc->addr;
-			hyp_log_size = (size_t)mem_desc->size;
-		}
+		if (mem_desc->type == Hip::Mem_desc::HYPERVISOR_LOG)
+			hyp_log = { (addr_t)mem_desc->addr, (size_t)mem_desc->size };
+
+		if (mem_desc->type == Hip::Mem_desc::PREBOOT_MEMORY)
+			preboot = { (addr_t)mem_desc->addr, (size_t)mem_desc->size };
 
 		uint64_t base = trunc_page(mem_desc->addr);
 		uint64_t size = mem_desc->size;
@@ -707,9 +710,6 @@ Core::Platform::Platform()
 				g.node("boot", [&] {
 					g.attribute("efi", efi_boot);
 
-					if (!boot_fb)
-						return;
-
 					g.node("framebuffer", [&] {
 						g.attribute("phys",   String<32>(Hex(boot_fb->addr)));
 						g.attribute("width",  Resolution::Width::get(boot_fb->size));
@@ -768,9 +768,14 @@ Core::Platform::Platform()
 	});
 
 	/* export hypervisor log memory */
-	if (hyp_log && hyp_log_size)
+	if (hyp_log.size)
 		new (core_mem_alloc())
-			Rom_module(_rom_fs, "kernel_log", hyp_log, hyp_log_size);
+			Rom_module(_rom_fs, "kernel_log", hyp_log.start, hyp_log.size);
+
+	/* export preboot memory */
+	if (preboot.size)
+		new (core_mem_alloc())
+			Rom_module(_rom_fs, "preboot", preboot.start, preboot.size);
 
 	/* show all warnings/errors after init_core_log setup core_log */
 	if (warn_reorder)
