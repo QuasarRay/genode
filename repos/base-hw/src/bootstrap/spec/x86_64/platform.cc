@@ -215,6 +215,10 @@ static inline void parse_multi_boot_2(::Board::Boot_info      &info,
 	},
 	[&] (uint64_t const efi_sys_tab) {
 		info.efi_system_table = efi_sys_tab;
+	},
+	[&] (auto const preboot, auto const size) {
+		info.preboot = preboot;
+		info.preboot_size = size;
 	});
 }
 

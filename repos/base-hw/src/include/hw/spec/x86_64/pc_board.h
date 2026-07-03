@@ -54,6 +54,8 @@ struct Hw::Pc_board::Boot_info
 	Genode::uint32_t tsc_freq_khz     { 0 };
 	Genode::uint32_t apic_freq_khz    { 0 };
 	Genode::uint8_t  apic_div         { 0 };
+	Genode::uint64_t preboot          { 0 };
+	Genode::uint64_t preboot_size     { 0 };
 
 	bool invariant_tsc { false };
 	bool has_svm { false };

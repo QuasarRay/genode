@@ -40,6 +40,7 @@ class Genode::Multiboot2_info : Mmio<0x8>
 					EFI_SYSTEM_TABLE_64 = 12,
 					ACPI_RSDP_V1        = 14,
 					ACPI_RSDP_V2        = 15,
+					PREBOOT             = 0xaffe,
 				};
 			};
 			struct Size : Register <0x04, 32> { };
@@ -54,6 +55,16 @@ class Genode::Multiboot2_info : Mmio<0x8>
 			struct Pointer : Register <0x08, 64> { };
 
 			Efi_system_table_64(addr_t addr) : Tag_tpl(addr) { }
+		};
+
+		struct Module: Genode::Mmio <0x10>
+		{
+			struct Type  : Register <0x00, 32> { };
+			struct Size  : Register <0x04, 32> { };
+			struct Start : Register <0x08, 32> { };
+			struct End   : Register <0x0c, 32> { };
+
+			Module(addr_t addr): Mmio({(char *)addr, Mmio::SIZE}) { }
 		};
 
 	public:
@@ -101,7 +112,8 @@ class Genode::Multiboot2_info : Mmio<0x8>
 		                  auto const &acpi_rsdp_v1_fn,
 		                  auto const &acpi_rsdp_v2_fn,
 		                  auto const &fb_fn,
-		                  auto const &systab64_fn)
+		                  auto const &systab64_fn,
+		                  auto const &preboot_fn)
 		{
 			addr_t const size = read<Multiboot2_info::Size>();
 
@@ -148,6 +160,14 @@ class Genode::Multiboot2_info : Mmio<0x8>
 					Hw::Framebuffer const * fb = reinterpret_cast<Hw::Framebuffer *>(fb_addr);
 					if (sizeof(*fb) <= tag.read<Tag::Size>() - sizeof_tag)
 						fb_fn(*fb);
+				}
+
+				if (tag.read<Tag::Type>() == Tag::Type::PREBOOT) {
+					Module mod(tag_addr);
+
+					preboot_fn(mod.read<Module::Start>(),
+					           mod.read<Module::End>() -
+					           mod.read<Module::Start>() + 1);
 				}
 
 				tag_addr += align_addr(tag.read<Tag::Size>(), { .log2 = Tag::LOG2_SIZE });
