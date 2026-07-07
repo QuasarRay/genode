@@ -50,6 +50,8 @@ class Core::Platform : public Platform_generic
 		addr_t         _vm_start = 0;   /* begin of virtual memory */
 		size_t         _vm_size  = 0;   /* size of virtual memory */
 
+		Constructible<Rom_module> _preboot { };
+
 		/*
 		 * We do not export any boot module loaded before FIRST_ROM.
 		 */
@@ -89,6 +91,11 @@ class Core::Platform : public Platform_generic
 		void _init_rom_modules();
 
 		addr_t _rom_module_phys(addr_t virt) { return virt; }
+
+		/**
+		 * Setup HID preboot ROM
+		 */
+		void _setup_preboot_rom();
 
 	public:
 

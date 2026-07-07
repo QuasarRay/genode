@@ -17,6 +17,7 @@
 #include <base/capability.h>
 #include <base/node.h>
 #include <util/misc_math.h>
+#include <util/mmio.h>
 
 /* base-internal includes */
 #include <base/internal/crt0.h>
@@ -566,6 +567,59 @@ void Core::Platform::_setup_basics()
 }
 
 
+void Platform::_setup_preboot_rom()
+{
+	using namespace Pistachio;
+
+	L4_KernelInterfacePage_t &kip = *get_kip();
+
+	for (unsigned n = 0, i = 0; i < L4_NumMemoryDescriptors(&kip); i++) {
+		auto &md = *L4_MemoryDesc(&kip, i);
+
+		/* lookup MBI, added by pistachio/user/util/kickstart/mbi-loader.c */
+		if (((L4_Type(&md) >> 0) & 0xf) != L4_BootLoaderSpecificMemoryType)
+			continue;
+		if (((L4_Type(&md) >> 4) & 0xf) != L4_ConventionalMemoryType)
+			continue;
+
+		/* second entry contains the MBI data structure */
+		if (n++ != 1)
+			continue;
+
+		addr_t const mbi_page = addr_t(L4_Low(&md));
+
+		L4_Fpage_t res = L4_Sigma0_GetPage(get_sigma0(),
+		                                   L4_Fpage(trunc_page(mbi_page), PAGE_SIZE));
+		if (L4_IsNilFpage(res)) {
+			error(" preobot ROM setup failed");
+			return;
+		}
+
+		struct Mbi1 : Mmio<0x3c>
+		{
+			struct Size : Register<0x34, 32> { }; /* spec: Drives_length */
+			struct Addr : Register<0x38, 32> { }; /* spec: Drives_addr */
+
+			Mbi1(addr_t addr) : Mmio({(char *)addr, Mmio::SIZE}) { }
+		};
+
+		Mbi1 mbi1(mbi_page);
+
+		auto const preboot_size = mbi1.read<Mbi1::Size>();
+		auto const preboot_addr = mbi1.read<Mbi1::Addr>();
+
+		Region const preboot_range { preboot_addr,
+		                             preboot_addr + preboot_size };
+
+		remove_region(preboot_range, _region_alloc);
+		remove_region(preboot_range, _ram_alloc);
+		remove_region(preboot_range, _io_mem_alloc);
+
+		_preboot.construct(_rom_fs, "preboot", preboot_addr, preboot_size);
+	}
+}
+
+
 Platform_pd &Core::Platform::core_pd()
 {
 	/* on first call, setup task object for core task */
@@ -595,6 +649,7 @@ Core::Platform::Platform()
 	_setup_io_port_alloc();
 	_setup_irq_alloc();
 	_init_rom_modules();
+	_setup_preboot_rom();
 
 	log(_rom_fs);
 

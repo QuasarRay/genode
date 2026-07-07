@@ -1,0 +1,13 @@
+--- a/user/util/kickstart/mbi.cc
++++ a/user/util/kickstart/mbi.cc
+@@ -121,6 +121,10 @@
+ 	    return false;
+     }
+ 
++    if (this->drives_length)
++	if (is_intersection(start, end, this->drives_addr, this->drives_length))
++	    return false;
++
+     // Look for a conflict with the bootloader.
+     extern char _kickstart_begin[], _kickstart_end[];
+     L4_Word_t kick_begin = L4_Word_t(_kickstart_begin);
