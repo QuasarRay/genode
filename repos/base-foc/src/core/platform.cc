@@ -506,6 +506,36 @@ void Core::Platform::_setup_basics()
 }
 
 
+void Platform::_setup_preboot_rom()
+{
+	using namespace Foc;
+
+	l4_kernel_info_t const &kip = sigma0_map_kip();
+
+	struct Mbi1 : Mmio<0x3c>
+	{
+		struct Size : Register<0x34, 32> { }; /* spec: Drives_length */
+		struct Addr : Register<0x38, 32> { }; /* spec: Drives_addr */
+
+		Mbi1(addr_t addr) : Mmio({(char *)addr, Mmio::SIZE}) { }
+	};
+
+	Mbi1 mbi1(kip.user_ptr);
+
+	auto const preboot_size = mbi1.read<Mbi1::Size>();
+	auto const preboot_addr = mbi1.read<Mbi1::Addr>();
+
+	Region const preboot_range { preboot_addr,
+	                             preboot_addr + preboot_size };
+
+	remove_region(preboot_range, _region_alloc);
+	remove_region(preboot_range, _ram_alloc);
+	remove_region(preboot_range, _io_mem_alloc);
+
+	_preboot.construct(_rom_fs, "preboot", preboot_addr, preboot_size);
+}
+
+
 Core::Platform::Platform()
 :
 	_ram_alloc(nullptr), _io_mem_alloc(&core_mem_alloc()),
@@ -530,6 +560,7 @@ Core::Platform::Platform()
 	_setup_io_port_alloc();
 	_setup_irq_alloc();
 	_init_rom_modules();
+	_setup_preboot_rom();
 
 	log(_rom_fs);
 

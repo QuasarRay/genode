@@ -80,6 +80,8 @@ class Core::Platform : public Platform_generic
 		addr_t           _vm_start = 0;      /* begin of virtual memory */
 		size_t           _vm_size  = 0;      /* size of virtual memory */
 
+		Constructible<Rom_module> _preboot { };
+
 		/**
 		 * Setup base resources
 		 *
@@ -119,6 +121,11 @@ class Core::Platform : public Platform_generic
 		void _setup_core_pager();
 
 		addr_t _rom_module_phys(addr_t virt) { return virt; }
+
+		/**
+		 * Setup HID preboot ROM
+		 */
+		void _setup_preboot_rom();
 
 	public:
 

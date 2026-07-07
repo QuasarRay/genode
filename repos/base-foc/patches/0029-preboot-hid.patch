@@ -1,0 +1,42 @@
+Forward Genode preboot HID to the roottask. The MBI2 to MBI1 adapter code
+of Fiasco's bootstrap transform it to the re-used drives_addr/length fields.
+
+--- l4/pkg/bootstrap/server/src/multiboot2.cc
++++ l4/pkg/bootstrap/server/src/multiboot2.cc
+@@ -142,6 +142,12 @@
+     *rsdp_end = reinterpret_cast<l4_uint32_t>(end() + size);
+   }
+ 
++  void genode_add_hid(l4_uint32_t start, l4_uint32_t end)
++  {
++    _mbi.drives_addr   = start;
++    _mbi.drives_length = end - start + 1;
++  }
++
+   // Finalize conversion from multiboot2 to multiboot info buffer
+   void finalize()
+   {
+@@ -217,6 +223,8 @@
+         case L4UTIL_MB2_RSDP_NEW_INFO_TAG:
+           buf.process_rsdp(tag, &rsdp_start, &rsdp_end);
+           break;
++        case 0xaffe:
++          buf.genode_add_hid(tag->module.mod_start, tag->module.mod_end);
+         default:
+           tag = reinterpret_cast<l4util_mb2_tag_t *>(
+             reinterpret_cast<char *>(tag)
+--- l4/pkg/bootstrap/server/src/platform/x86_pc.cc
++++ l4/pkg/bootstrap/server/src/platform/x86_pc.cc
+@@ -321,6 +321,12 @@
+           r = mem_manager->regions->remove(r);
+       }
+ 
++    if (mbi->drives_length)
++      mem_manager->regions->add(Region::start_size(mbi->drives_addr,
++                                                   mbi->drives_length,
++                                                   ".genode_hid",
++                                                   Region::Boot));
++
+     move_modules(mod_addr);
+ 
+     // Our aim here is to allocate an aligned chunk of memory for our copy of
