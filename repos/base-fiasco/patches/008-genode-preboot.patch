@@ -1,0 +1,12 @@
+--- fiasco/snapshot/l4/pkg/bootstrap/server/src/startup.cc
++++ fiasco/snapshot/l4/pkg/bootstrap/server/src/startup.cc
+@@ -774,6 +774,9 @@
+ 	    break;
+ 	  }
+       }
++
++      if (mbi->drives_length)
++          regions.add(Region::n(mbi->drives_addr, mbi->drives_addr + mbi->drives_length, ".genode_hid", Region::No_mem));
+     }
+ }
+ 
