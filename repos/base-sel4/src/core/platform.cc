@@ -490,6 +490,23 @@ void Core::Platform::_init_rom_modules()
 				});
 			}
 
+			if (element->id == SEL4_BOOTINFO_HEADER_X86_GENODE_PREBOOT) {
+				auto const values = reinterpret_cast<uint64_t const *>(reinterpret_cast<addr_t>(element) + sizeof(*element));
+				auto const preboot_paddr = values[0];
+				auto const preboot_end   = values[1];
+
+				if (preboot_paddr < preboot_end) {
+					auto const preboot_size = align_addr(preboot_end - preboot_paddr, AT_PAGE);
+					auto const pages        = preboot_size >> AT_PAGE.log2;
+					if (!Untyped_memory::convert_to_page_frames(preboot_paddr, pages))
+						continue;
+					if (_core_mem_alloc.phys_alloc().remove_range(preboot_paddr, preboot_size).ok())
+						new (core_mem_alloc())
+							Rom_module(_rom_fs, "preboot", preboot_paddr,
+							           preboot_size);
+				}
+			}
+
 			if (element->id != SEL4_BOOTINFO_HEADER_X86_ACPI_RSDP)
 				continue;
 

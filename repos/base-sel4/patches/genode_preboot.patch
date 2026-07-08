@@ -1,0 +1,169 @@
+--- src/kernel/sel4/include/arch/x86/arch/kernel/boot.h
++++ src/kernel/sel4/include/arch/x86/arch/kernel/boot.h
+@@ -38,7 +38,8 @@ bool_t init_sys_state(
+     acpi_rsdp_t      *acpi_rsdp,
+     seL4_X86_BootInfo_VBE *vbe,
+     seL4_X86_BootInfo_mmap_t *mb_mmap,
+-    seL4_X86_BootInfo_fb_t *fb_info
++    seL4_X86_BootInfo_fb_t *fb_info,
++    p_region_t genode_preboot
+ );
+ 
+ bool_t init_cpu(
+--- src/kernel/sel4/include/arch/x86/arch/kernel/boot_sys.h
++++ src/kernel/sel4/include/arch/x86/arch/kernel/boot_sys.h
+@@ -29,6 +29,7 @@ typedef struct boot_state {
+     seL4_X86_BootInfo_VBE vbe_info; /* Potential VBE information from multiboot */
+     seL4_X86_BootInfo_mmap_t mb_mmap_info; /* memory map information from multiboot */
+     seL4_X86_BootInfo_fb_t fb_info; /* framebuffer information as set by bootloader */
++    p_region_t genode_preboot; /* physical region about hardware information for Genode */
+ } boot_state_t;
+ 
+ extern boot_state_t boot_state;
+--- src/kernel/sel4/libsel4/include/sel4/bootinfo_types.h
++++ src/kernel/sel4/libsel4/include/sel4/bootinfo_types.h
+@@ -106,6 +106,7 @@ typedef enum {
+     SEL4_BOOTINFO_HEADER_X86_FRAMEBUFFER    = 4,
+     SEL4_BOOTINFO_HEADER_X86_TSC_FREQ       = 5, /* frequency is in MHz */
+     SEL4_BOOTINFO_HEADER_FDT                = 6, /* device tree */
++    SEL4_BOOTINFO_HEADER_X86_GENODE_PREBOOT = 7,
+     /* Add more IDs here, the two elements below must always be at the end. */
+     SEL4_BOOTINFO_HEADER_NUM,
+     SEL4_FORCE_LONG_ENUM(seL4_BootInfoID)
+--- src/kernel/sel4/src/arch/x86/kernel/boot.c
++++ src/kernel/sel4/src/arch/x86/kernel/boot.c
+@@ -94,7 +94,8 @@ BOOT_CODE bool_t init_sys_state(
+     acpi_rsdp_t      *acpi_rsdp,
+     seL4_X86_BootInfo_VBE *vbe,
+     seL4_X86_BootInfo_mmap_t *mb_mmap,
+-    seL4_X86_BootInfo_fb_t *fb_info
++    seL4_X86_BootInfo_fb_t *fb_info,
++    p_region_t const genode_preboot
+ )
+ {
+     cap_t         root_cnode_cap;
+@@ -209,6 +210,17 @@ BOOT_CODE bool_t init_sys_state(
+         extra_bi_offset += sizeof(*fb_info);
+     }
+ 
++    /* populate with Genode HID information block */
++    if (genode_preboot.start) {
++        seL4_BootInfoHeader header;
++        header.id = SEL4_BOOTINFO_HEADER_X86_GENODE_PREBOOT;
++        header.len = sizeof(header) + sizeof(genode_preboot);
++        *(seL4_BootInfoHeader *)(rootserver.extra_bi + extra_bi_offset) = header;
++        extra_bi_offset += sizeof(header);
++        memcpy((void *)(rootserver.extra_bi + extra_bi_offset), &genode_preboot, sizeof(genode_preboot));
++        extra_bi_offset += sizeof(genode_preboot);
++    }
++
+     /* populate multiboot mmap block */
+     mb_mmap->header.id = SEL4_BOOTINFO_HEADER_X86_MBMMAP;
+     mb_mmap->header.len = mb_mmap_size;
+--- src/kernel/sel4/src/arch/x86/kernel/boot_sys.c
++++ src/kernel/sel4/src/arch/x86/kernel/boot_sys.c
+@@ -179,7 +179,8 @@ static BOOT_CODE bool_t try_boot_sys_node(cpu_id_t cpu_id)
+             &boot_state.acpi_rsdp,
+             &boot_state.vbe_info,
+             &boot_state.mb_mmap_info,
+-            &boot_state.fb_info
++            &boot_state.fb_info,
++            boot_state.genode_preboot
+         )) {
+         return false;
+     }
+@@ -214,6 +215,44 @@ static BOOT_CODE bool_t add_mem_p_regs(p_region_t reg)
+     return true;
+ }
+ 
++static BOOT_CODE void remove_reserved_p_regs(p_region_t const check)
++{
++    for (int i = 0; i < boot_state.mem_p_regs.count; i++) {
++        bool_t replaced = false;
++
++        p_region_t const region = boot_state.mem_p_regs.list[i];
++
++        if (region.end   <= check.start) continue;
++        if (region.start >= check.end)   continue;
++
++        printf("Adjusting range %lx-%lx intersecting with reserved range %lx-%lx\n",
++               region.start, region.end, check.start, check.end);
++
++        if (region.start < check.start) {
++            boot_state.mem_p_regs.list[i].end = check.start;
++            replaced = true;
++        }
++        if (check.end < region.end) {
++            if (replaced)
++                add_mem_p_regs((p_region_t){ check.end, region.end });
++            else
++                boot_state.mem_p_regs.list[i].start = check.end;
++        }
++    }
++
++    /* sort */
++    for (int i = boot_state.mem_p_regs.count - 1; i > 0; i--) {
++
++        p_region_t const region = boot_state.mem_p_regs.list[i - 0];
++        p_region_t const before = boot_state.mem_p_regs.list[i - 1];
++
++        if (region.start < before.start) {
++            boot_state.mem_p_regs.list[i - 1] = region;
++            boot_state.mem_p_regs.list[i - 0] = before;
++        }
++    }
++}
++
+ /*
+  * the code relies that the GRUB provides correct information
+  * about the actual physical memory regions.
+@@ -606,7 +633,7 @@ static BOOT_CODE bool_t try_boot_sys_mbi1(
+ }
+ 
+ static BOOT_CODE bool_t try_boot_sys_mbi2(
+-    multiboot2_header_t *mbi2
++    multiboot2_header_t const * const mbi2
+ )
+ {
+     int mod_count                  = 0;
+@@ -685,11 +712,40 @@ static BOOT_CODE bool_t try_boot_sys_mbi2(
+             printf("Got framebuffer info in multiboot2. Current video mode is at physical address=%llx pitch=%u resolution=%ux%u@%u type=%u\n",
+                    fb->addr, fb->pitch, fb->width, fb->height, fb->bpp, fb->type);
+             boot_state.fb_info = *fb;
++        } else if (tag->type == 0xaffe) {
++            multiboot2_module_t const *module = (multiboot2_module_t const *)behind_tag;
++            boot_state.genode_preboot.start = module->start;
++            boot_state.genode_preboot.end   = ROUND_UP(module->end + 1, PAGE_BITS);
++        }
++
++        tag = (multiboot2_tag_t const *)((word_t)tag + ROUND_UP(tag->size, 3));
++    }
++
++    /* remove reserved memory from usable memory list */
++    tag = (multiboot2_tag_t *)(mbi2 + 1);
++    while (tag < tag_e && tag->type != MULTIBOOT2_TAG_END) {
++        word_t const behind_tag = (word_t)tag + sizeof(*tag);
++
++        if (tag->type == MULTIBOOT2_TAG_MEMORY) {
++            multiboot2_memory_t const *s = (multiboot2_memory_t *)(behind_tag + 8);
++            multiboot2_memory_t const *e = (multiboot2_memory_t *)((word_t)tag + tag->size);
++
++            for (multiboot2_memory_t const *m = s; m < e; m++) {
++                if (m->type == MULTIBOOT_MMAP_USEABLE_TYPE)
++                    continue;
++
++                p_region_t region = { m->addr, m->addr + m->size };
++
++                remove_reserved_p_regs(region);
++            }
+         }
+ 
+         tag = (multiboot2_tag_t const *)((word_t)tag + ROUND_UP(tag->size, 3));
+     }
+ 
++    /* remove genode preboot memory from usable memory list */
++    remove_reserved_p_regs(boot_state.genode_preboot);
++
+     printf("Detected %d boot module(s):\n", mod_count);
+ 
+     if (mod_count < 1) {
