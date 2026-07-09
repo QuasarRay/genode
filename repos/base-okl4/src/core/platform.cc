@@ -115,6 +115,29 @@ void Genode::Thread::_init_native_main_thread(Stack &stack)
 }
 
 
+void Platform::_setup_preboot_rom()
+{
+	region_alloc().alloc_aligned(0x1000, AT_PAGE).with_result([&] (auto &virt) {
+		auto image_phys_end = unsigned(&_prog_img_end);
+
+		if (!map_local(image_phys_end, addr_t(virt.ptr), 1 /* PAGE */))
+			return;
+
+		auto preboot_info = addr_t(virt.ptr) + (image_phys_end & 0xfff);
+		auto preboot_size = *reinterpret_cast<unsigned *>(unsigned(preboot_info + 0));
+		auto preboot_phys = *reinterpret_cast<unsigned *>(unsigned(preboot_info + 4));
+		auto log_size     = align_addr(preboot_size, AT_PAGE) >> PAGE_SIZE_LOG2;
+
+		if (ram_alloc().remove_range(preboot_phys, log_size << 12).ok()) {
+			new (core_mem_alloc())
+				Rom_module(_rom_fs, "preboot", preboot_phys, log_size);
+		}
+
+		unmap_local(addr_t(virt.ptr), 1 /* PAGE */);
+	}, [&] (Alloc_error) { });
+}
+
+
 Core::Platform::Platform()
 :
 	_io_mem_alloc(&core_mem_alloc()), _io_port_alloc(&core_mem_alloc()),
@@ -186,6 +209,7 @@ Core::Platform::Platform()
 		warning("unable to initialize I/O-port allocator");
 
 	_init_rom_modules();
+	_setup_preboot_rom();
 
 	/* preserve stack area in core's virtual address space */
 	if (_core_mem_alloc.virt_alloc().remove_range(stack_area_virtual_base(),

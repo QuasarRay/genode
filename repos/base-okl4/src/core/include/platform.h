@@ -79,6 +79,11 @@ class Core::Platform : public Platform_generic
 
 		addr_t _rom_module_phys(addr_t virt) { return virt; }
 
+		/**
+		 * Setup HID preboot ROM
+		 */
+		void _setup_preboot_rom();
+
 	public:
 
 		Mapped_ram_allocator mapped_ram { _core_mem_alloc.phys_alloc(),
