@@ -15,11 +15,11 @@
 
 /* bootstrap includes */
 #include <assert.h>
-#include <bios_data_area.h>
 #include <platform.h>
 #include <multiboot.h>
 #include <multiboot2.h>
 #include <port_io.h>
+#include <base/node.h>
 
 #include <hw/memory_consts.h>
 #include <hw/spec/x86_64/acpi.h>
@@ -147,13 +147,65 @@ static inline void memory_add_region(addr_t base, addr_t size,
 }
 
 
-static inline void parse_multi_boot_1(Hw::Memory_region_array &early,
+static uint16_t uart_ioport_from_preboot()
+{
+	uint16_t ioport = 0;
+
+	auto parse_preboot = [&](uint64_t preboot_start, uint64_t size) {
+		Const_byte_range_ptr range((char const *)preboot_start, size);
+		Node(range).with_optional_sub_node("boot", [&](auto const &boot) {
+			boot.with_optional_sub_node("uart", [&](auto const &uart) {
+				ioport = uint16_t(uart.attribute_value("ioport", 0U));
+			});
+		});
+	};
+
+	switch (__initial_ax) {
+	case Multiboot_info::MAGIC: {
+		Multiboot_info mbi1 { __initial_bx };
+
+		mbi1.with_preboot([&](auto preboot, auto size) {
+			parse_preboot(uint64_t(preboot), size);
+		});
+		break;
+	}
+	case Multiboot2_info::MAGIC: {
+
+		Multiboot2_info mbi2(__initial_bx);
+
+		mbi2.for_each_tag([&] (Multiboot2_info::Memory const &) { },
+		[&] (Hw::Acpi::Rsdp const &) { },
+		[&] (Hw::Acpi::Rsdp const &) { },
+		[&] (Hw::Framebuffer const &) { },
+		[&] (uint64_t) { },
+		[&] (auto const preboot, auto const size) {
+			parse_preboot(uint64_t(preboot), size);
+		});
+		break;
+	}
+	default:
+		break;
+	}
+	return ioport;
+}
+
+
+static inline void parse_multi_boot_1(::Board::Boot_info      &info,
+                                      Hw::Memory_region_array &early,
                                       Hw::Memory_region_array &late)
 {
+	Multiboot_info mbi1 { __initial_bx };
+
+	mbi1.with_preboot([&](auto addr, auto size) {
+		info.preboot      = addr;
+		info.preboot_size = size;
+		info.uart_ioport  = uart_ioport_from_preboot();
+	});
+
 	for (unsigned i = 0; true; i++) {
 		using Mmap = Multiboot_info::Mmap;
 
-		Mmap v(Multiboot_info(__initial_bx).phys_ram_mmap_base(i));
+		Mmap v { mbi1.phys_ram_mmap_base(i) };
 		if (!v.base()) break;
 
 		Mmap::Addr::access_t   base = v.read<Mmap::Addr>();
@@ -220,6 +272,8 @@ static inline void parse_multi_boot_2(::Board::Boot_info      &info,
 		info.preboot = preboot;
 		info.preboot_size = size;
 	});
+
+	info.uart_ioport = uart_ioport_from_preboot();
 }
 
 
@@ -235,7 +289,7 @@ Bootstrap::Platform::Board::Board()
 
 	switch (__initial_ax) {
 	case Multiboot_info::MAGIC:
-		parse_multi_boot_1(early_ram_regions, late_ram_regions);
+		parse_multi_boot_1(info, early_ram_regions, late_ram_regions);
 		break;
 	case Multiboot2_info::MAGIC:
 		parse_multi_boot_2(info, early_ram_regions, late_ram_regions);
@@ -420,12 +474,9 @@ Bootstrap::Platform::Cpu_id Bootstrap::Platform::enable_mmu()
 }
 
 
-addr_t Bios_data_area::_mmio_base_virt() { return 0x1ff000; }
-
-
 Board::Serial::Serial(addr_t, size_t, unsigned baudrate)
 :
-	X86_uart(Bios_data_area::singleton()->serial_port(), 0, baudrate)
+	X86_uart(uart_ioport_from_preboot(), 0, baudrate)
 { }
 
 

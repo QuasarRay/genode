@@ -12,7 +12,6 @@
  * under the terms of the GNU Affero General Public License version 3.
  */
 
-#include <bios_data_area.h>
 #include <platform.h>
 #include <kernel/cpu.h>
 #include <map_local.h>
@@ -91,7 +90,15 @@ void Core::Platform::free_msi_vector(addr_t, addr_t value)
 }
 
 
+static uint16_t uart_ioport_from_boot_info()
+{
+	auto &boot_info = *reinterpret_cast<Hw::Boot_info<Board::Boot_info>*>(Hw::Mm::boot_info().base);
+
+	return boot_info.plat_info.uart_ioport;
+}
+
+
 Board::Serial::Serial(addr_t, size_t, unsigned baudrate)
 :
-	X86_uart(Bios_data_area::singleton()->serial_port(), 0, baudrate)
+	X86_uart(uart_ioport_from_boot_info(), 0, baudrate)
 { }

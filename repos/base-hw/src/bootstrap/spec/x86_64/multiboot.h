@@ -21,7 +21,7 @@
 namespace Genode { class Multiboot_info; }
 
 
-class Genode::Multiboot_info : Mmio<0x34>
+class Genode::Multiboot_info : Mmio<0x4b>
 {
 	private:
 
@@ -32,6 +32,9 @@ class Genode::Multiboot_info : Mmio<0x34>
 
 		struct Mmap_length: Register<0x2c, 32> { };
 		struct Mmap_addr  : Register<0x30, 32> { };
+
+		struct Preboot_length : Register<0x34, 32> { };
+		struct Preboot_addr   : Register<0x38, 32> { };
 
 	public:
 
@@ -87,6 +90,9 @@ class Genode::Multiboot_info : Mmio<0x34>
 
 			return 0;
 		}
+
+		void with_preboot(auto const &fn) const {
+			fn(read<Preboot_addr>(), read<Preboot_length>()); }
 };
 
 #endif /* _SRC__BOOTSTRAP__SPEC__X86_64__MULTIBOOT_H_ */

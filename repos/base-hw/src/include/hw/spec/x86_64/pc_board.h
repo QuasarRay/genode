@@ -56,6 +56,7 @@ struct Hw::Pc_board::Boot_info
 	Genode::uint8_t  apic_div         { 0 };
 	Genode::uint64_t preboot          { 0 };
 	Genode::uint64_t preboot_size     { 0 };
+	Genode::uint16_t uart_ioport      { 0 };
 
 	bool invariant_tsc { false };
 	bool has_svm { false };

@@ -22,7 +22,6 @@ SRC_CC += kernel/mutex.cc
 SRC_CC += kernel/vcpu_thread_on.cc
 SRC_CC += spec/x86/io_port_session_component.cc
 SRC_CC += spec/x86/io_port_session_support.cc
-SRC_CC += spec/x86_64/bios_data_area.cc
 SRC_CC += spec/x86_64/cpu.cc
 SRC_CC += spec/x86_64/kernel/cpu.cc
 SRC_CC += spec/x86_64/kernel/pd.cc
