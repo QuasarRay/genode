@@ -199,11 +199,12 @@ class Interface : ::Id_space<::Interface>::Element
 				    ::Endpoint                    &endp,
 				    genode_usb_client_iface_type_t type,
 				    size_t                         size,
+				    uint32_t                       isoc_packets,
 				    void                          *opaque_data)
 				:
 					Usb::Endpoint(endp.address, endp.attributes),
 					Usb::Interface::Urb(iface, *this, _type(type),
-					                    size, 0),
+					                    size, isoc_packets),
 					_driver_data{opaque_data} {}
 		};
 
@@ -870,6 +871,7 @@ genode_usb_client_iface_transfer(genode_usb_client_dev_handle_t handle,
                                  genode_usb_client_iface_type_t type,
                                  genode_uint8_t                 index,
                                  unsigned long                  size,
+                                 genode_uint32_t                isoc_packets,
                                  void                          *opaque_data)
 {
 	try {
@@ -884,7 +886,7 @@ genode_usb_client_iface_transfer(genode_usb_client_dev_handle_t handle,
 						iface.with_session([&] (auto &session) {
 							new (iface.slab())
 								::Interface::Urb(session, endp, type, size,
-							                     opaque_data);
+							                     isoc_packets, opaque_data);
 							device.urbs_in_flight++;
 							result = OK;
 						});
