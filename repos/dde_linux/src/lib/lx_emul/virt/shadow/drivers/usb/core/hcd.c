@@ -72,15 +72,25 @@ int usb_hcd_submit_urb (struct urb *urb, gfp_t mem_flags)
 			r = genode_usb_client_iface_transfer(handle, IRQ,
 			                                     urb->ep->desc.bEndpointAddress,
 			                                     urb->transfer_buffer_length,
-			                                     urb);
+			                                     0, urb);
 			break;
 		}
 	case PIPE_BULK:
+		{
 			r = genode_usb_client_iface_transfer(handle, BULK,
 			                                     urb->ep->desc.bEndpointAddress,
 			                                     urb->transfer_buffer_length,
-			                                     urb);
+			                                     0, urb);
 			break;
+		}
+	case PIPE_ISOCHRONOUS:
+		{
+			r = genode_usb_client_iface_transfer(handle, ISOC,
+			                                     urb->ep->desc.bEndpointAddress,
+			                                     urb->transfer_buffer_length,
+			                                     urb->number_of_packets, urb);
+			break;
+		}
 	default:
 		printk("unknown URB requested: %d\n", usb_pipetype(urb->pipe));
 	}
@@ -131,3 +141,15 @@ int usb_hcd_unlink_urb (struct urb *urb, int status)
 
 	return ret;
 }
+
+
+/* original Linux kernel function */
+int usb_hcd_get_frame_number (struct usb_device *udev)
+{
+	struct usb_hcd *hcd = bus_to_hcd(udev->bus);
+
+	if (!HCD_RH_RUNNING(hcd))
+		return -ESHUTDOWN;
+	return hcd->driver->get_frame_number (hcd);
+}
+

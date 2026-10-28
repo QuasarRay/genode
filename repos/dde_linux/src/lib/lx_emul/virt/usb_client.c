@@ -152,16 +152,26 @@ static void urb_in(void * data, struct genode_const_buffer buf)
 static genode_uint32_t isoc_urb_out(void * data, genode_uint32_t idx,
                                     struct genode_buffer buf)
 {
-	printk("%s: not implemented yet, we had no isochronous Linux driver yet",
-	       __func__);
-	return 0;
+	struct urb *urb = (struct urb *) data;
+	unsigned const length = min(urb->iso_frame_desc[idx].length,
+	                            buf.num_bytes);
+	memcpy(buf.start,
+	       (void*)(urb->transfer_buffer + urb->iso_frame_desc[idx].offset),
+	       length);
+	return length;
 }
 
 
 static void isoc_urb_in(void * data, genode_uint32_t idx, struct genode_const_buffer buf)
 {
-	printk("%s: not implemented yet, we had no isochronous Linux driver yet",
-	       __func__);
+	struct urb *urb = (struct urb *) data;
+	unsigned const length = min(urb->iso_frame_desc[idx].length,
+	                            buf.num_bytes);
+	memcpy((void*)(urb->transfer_buffer + urb->iso_frame_desc[idx].offset),
+	       buf.start, length);
+	urb->iso_frame_desc[idx].actual_length = length;
+	/* assume success as we cannot propagate the status currently */
+	urb->iso_frame_desc[idx].status = 0;
 }
 
 
