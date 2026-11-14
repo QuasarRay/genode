@@ -1,0 +1,45 @@
+name: Publish Josh filtered history views
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/genode-josh.yml'
+      - '.github/mirror/josh_views.py'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: genode-josh-views
+  cancel-in-progress: false
+
+jobs:
+  filter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        id: josh-binary
+        with:
+          path: ~/.cargo/bin/josh-filter
+          key: josh-filter-r26.08.28-${{ runner.os }}-${{ runner.arch }}
+      - name: Install pinned Josh CLI
+        if: steps.josh-binary.outputs.cache-hit != 'true'
+        run: cargo install --locked --git https://github.com/josh-project/josh.git --tag r26.08.28 --bin josh-filter josh-cli
+      - name: Verify installed Josh
+        run: josh-filter --help
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Publish filtered refs (not main)
+        run: python .github/mirror/josh_views.py
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
