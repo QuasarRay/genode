@@ -61,7 +61,7 @@ def updated_tree(work: Path, destination: str, previous: str | None, upstream: s
     conflicts = []
     for path in sorted(old.keys() | new.keys()):
         before, after = old.get(path), new.get(path)
-        if before == after or protected(path):
+        if before == after or protected(path) or local.get(path) == after:
             continue
         # Own only the files whose Git blob+mode match the previous upstream.
         if local.get(path) != before:
@@ -100,7 +100,9 @@ def updated_tree(work: Path, destination: str, previous: str | None, upstream: s
 
 def sync_main(work: Path) -> list[tuple[bytes, str]]:
     source = "refs/remotes/upstream/main"
-    previous = "refs/remotes/github/codeberg/main"
+    baseline = "refs/remotes/github/mirror/last-successful"
+    fallback = "refs/remotes/github/codeberg/main"
+    previous = baseline if head_exists(work, baseline) else fallback
     dest = "refs/remotes/github/main"
     if not head_exists(work, source) or not head_exists(work, dest):
         raise RuntimeError("Missing main branch; refusing modifications")
@@ -155,7 +157,8 @@ def mirror(source: str = SOURCE, destination: str = DESTINATION) -> None:
             "+refs/heads/*:refs/remotes/upstream/*")
         cmd(work, "fetch", "--no-tags", "github",
             "+refs/heads/main:refs/remotes/github/main",
-            "+refs/heads/codeberg/*:refs/remotes/github/codeberg/*")
+            "+refs/heads/codeberg/*:refs/remotes/github/codeberg/*",
+            "+refs/heads/mirror/*:refs/remotes/github/mirror/*")
 
         conflicts = sync_main(work)
         # Publish exact upstream commit IDs, not synthetic copies, and delete
@@ -170,6 +173,10 @@ def mirror(source: str = SOURCE, destination: str = DESTINATION) -> None:
             print(f"CONFLICT: {os.fsdecode(path)}: {reason}")
         if conflicts:
             raise RuntimeError(f"Refusing to overwrite {len(conflicts)} user-modified paths")
+        # Advance baseline only when all source changes have been safely
+        # applied (or already match). Otherwise retry conflicts on every poll.
+        source_sha = cmd(work, "rev-parse", "refs/remotes/upstream/main").stdout.strip().decode()
+        cmd(work, "push", "github", f"{source_sha}:refs/heads/mirror/last-successful")
         print("branches/tags: synchronized; destination-only files preserved")
 
 
