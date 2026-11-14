@@ -5,9 +5,12 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - '.github/workflows/codeberg-mirror.yml'
-      - '.github/mirror/**'
+      - '.github/mirror/sync.py'
+      - '.github/mirror/test_sync.py'
+      - '.github/mirror/pipeline.py'
 
 permissions:
   contents: write
@@ -27,6 +30,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Git safety regression tests
+        run: python -m unittest -v test_sync
+        working-directory: .github/mirror
       - name: Install pinned Python SDK
         run: python -m pip install --disable-pip-version-check 'dagger-io==0.21.11'
       - name: Mirror branches, tags and default branch via Dagger
