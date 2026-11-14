@@ -1,0 +1,39 @@
+name: Mirror Genode from Codeberg
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/codeberg-mirror.yml'
+      - '.github/mirror/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: genode-codeberg-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Python SDK
+        run: python -m pip install --disable-pip-version-check 'dagger-io==0.21.11'
+      - name: Mirror branches, tags and default branch via Dagger
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: 'v0.21.11'
+          verb: run
+          args: python .github/mirror/pipeline.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
