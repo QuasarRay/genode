@@ -157,6 +157,27 @@ class MirrorTests(unittest.TestCase):
         self.assertEqual(git(self.admin, "show", "origin/main:.github/workflows/codeberg-mirror.yml"), self.workflow.strip())
         self.assertTrue(git(self.admin, "ls-remote", "--tags", "origin", "refs/tags/user-tag"))
 
+    def test_conflicts_remain_pending_across_multiple_polls(self):
+        self.invoke()
+        git(self.admin, "fetch", "origin", "main")
+        git(self.admin, "reset", "--hard", "origin/main")
+        commit(self.admin, "src/core.cc", "user edit\n", "owner changed core")
+        git(self.admin, "push", "origin", "main")
+        commit(self.source, "src/core.cc", "new upstream\n", "upstream changed core")
+        commit(self.source, "src/new.cc", "can update\n", "upstream added new file")
+        git(self.source, "push", "origin", "main")
+        for _ in range(2):
+            with self.assertRaisesRegex(RuntimeError, "Refusing to overwrite 1"):
+                self.invoke()
+        git(self.admin, "fetch", "origin", "main")
+        self.assertEqual(git(self.admin, "show", "origin/main:src/core.cc"), "user edit")
+        self.assertEqual(git(self.admin, "show", "origin/main:src/new.cc"), "can update")
+        git(self.admin, "reset", "--hard", "origin/main")
+        commit(self.admin, "src/core.cc", "new upstream\n", "owner resolved conflict")
+        git(self.admin, "push", "origin", "main")
+        self.invoke()
+        self.invoke()
+
     def test_no_change_polls_do_not_commit(self):
         self.invoke()
         before = git(self.admin, "ls-remote", "origin", "refs/heads/main").split()[0]
