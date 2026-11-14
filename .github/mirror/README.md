@@ -8,7 +8,7 @@ GitHub: https://github.com/QuasarRay/genode
 The Dagger + Python workflow polls every five minutes (GitHub schedules can
 run late). It uses three Git object trees:
 
-- Previous imported upstream tree: `codeberg/main` before each poll
+- Last fully applied upstream tree: `mirror/last-successful` (initial fallback: prior `codeberg/main`)
 - Current upstream tree: freshly fetched Codeberg `main`
 - Destination tree: the current GitHub `main`
 
@@ -16,7 +16,8 @@ It only updates or deletes a destination file if its Git blob ID **and mode**
 still match the previous upstream version. Unrelated destination paths are
 never touched. New upstream files are installed only when no destination
 file exists at that path. Changes to user-modified paths become **visible
-conflicts**, not overwritten data. Git renames are applied as safe deletion
+conflicts**, not overwritten data. On a conflict, the successful-update cursor
+stays pinned, so later polls continue reporting it until the file is resolved. Git renames are applied as safe deletion
 plus addition; path collisions cannot overwrite unrelated subtrees.
 
 All of `.github/` is excluded from upstream writes, so other workflows and
@@ -35,6 +36,7 @@ refuses to apply changes to `main`. No-change polls create no commits.
 - `codeberg/*` **branches**: exact upstream branch commits (mirror-owned).
 - `codeberg/*` **tags**: upstream tags (mirror-owned).
 - `josh/*` **branches**: transformed, history-filtered read-only views.
+- `mirror/last-successful` **branch**: upstream checkpoint for safe conflict retries.
 
 Only these namespaces can be pruned or force-updated. User tags and all
 other branches remain untouched. Do not put personal work in reserved refs.
