@@ -34,39 +34,95 @@ def head_exists(work: Path, rev: str) -> bool:
     return cmd(work, "rev-parse", "--verify", "--quiet", rev, check=False).returncode == 0
 
 
-def sync_main(work: Path) -> bool:
+def entries(work: Path, ref: str | None) -> dict[bytes, tuple[bytes, bytes]]:
+    """Read Git tree entries without materializing files or following symlinks."""
+    if ref is None:
+        return {}
+    result = {}
+    for line in cmd(work, "ls-tree", "-r", "-z", ref).stdout.split(b"\0"):
+        if not line:
+            continue
+        info, path = line.split(b"\t", 1)
+        mode, _kind, sha = info.split(b" ")
+        result[path] = (mode, sha)
+    return result
+
+
+def protected(path: bytes) -> bool:
+    return path == b".github" or path.startswith(b".github/")
+
+
+def updated_tree(work: Path, destination: str, previous: str | None, upstream: str):
+    old = entries(work, previous)
+    new = entries(work, upstream)
+    local = entries(work, destination)
+    result = local.copy()
+    candidates = {}
+    conflicts = []
+    for path in sorted(old.keys() | new.keys()):
+        before, after = old.get(path), new.get(path)
+        if before == after or protected(path):
+            continue
+        # Own only the files whose Git blob+mode match the previous upstream.
+        if local.get(path) != before:
+            conflicts.append((path, "destination differs from prior upstream version"))
+            continue
+        candidates[path] = after
+
+    for path, after in candidates.items():
+        if after is None:
+            result.pop(path, None)
+    for path, after in candidates.items():
+        if after is None:
+            continue
+        ancestors = [path[:i] for i, ch in enumerate(path) if ch == 47]
+        if any(a in result for a in ancestors) or any(p.startswith(path + b"/") for p in result):
+            conflicts.append((path, "file/directory collision"))
+            continue
+        result[path] = after
+
+    if result == local:
+        return None, conflicts
+    cmd(work, "read-tree", destination)
+    changes = []
+    for path in sorted(local.keys() | result.keys()):
+        if local.get(path) == result.get(path):
+            continue
+        if path not in result:
+            changes.append(b"0 " + b"0" * 40 + b"\t" + path + b"\0")
+        else:
+            mode, sha = result[path]
+            changes.append(mode + b" " + sha + b"\t" + path + b"\0")
+    cmd(work, "update-index", "-z", "--index-info", data=b"".join(changes))
+    tree = cmd(work, "write-tree").stdout.strip().decode("ascii")
+    return tree, conflicts
+
+
+def sync_main(work: Path) -> list[tuple[bytes, str]]:
     source = "refs/remotes/upstream/main"
+    previous = "refs/remotes/github/codeberg/main"
     dest = "refs/remotes/github/main"
-    if not head_exists(work, source):
-        raise RuntimeError("Codeberg main branch is missing; refusing to modify destination")
-    if not head_exists(work, dest):
-        raise RuntimeError("GitHub main branch is missing; bootstrap workflow first")
+    if not head_exists(work, source) or not head_exists(work, dest):
+        raise RuntimeError("Missing main branch; refusing modifications")
+    if head_exists(work, previous) and cmd(
+        work, "merge-base", "--is-ancestor", previous, source, check=False
+    ).returncode != 0:
+        raise RuntimeError("Upstream history rewritten; refusing to update main")
 
-    if cmd(work, "merge-base", "--is-ancestor", source, dest, check=False).returncode == 0:
-        print("main: already contains latest Codeberg main")
-        return False
-
-    # Start from the *exact* upstream tree and explicitly restore only our CI
-    # files. Never run workflows supplied by the upstream source repository.
-    cmd(work, "switch", "--detach", source)
-    cmd(work, "rm", "-r", "-f", "--ignore-unmatch", "--", ".github/workflows")
-    for relative in OVERLAY_FILES:
-        blob = cmd(work, "show", f"{dest}:{relative}").stdout
-        target = work / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(blob)
-
-    cmd(work, "add", "--", ".github/workflows", ".github/mirror")
-    if cmd(work, "diff", "--cached", "--quiet", check=False).returncode == 1:
-        cmd(work, "commit", "-m", "chore(mirror): retain trusted GitHub automation")
-
-    # Preserve the original upstream commit IDs and *also* preserve all
-    # previous GitHub main history. The resulting push is fast-forward only.
-    cmd(work, "merge", "-s", "ours", "--no-ff", "--allow-unrelated-histories",
-        "-m", "chore(mirror): merge Codeberg main", dest)
-    cmd(work, "push", "github", "HEAD:refs/heads/main")
-    print("main: synchronized Genode source and preserved automation")
-    return True
+    tree, conflicts = updated_tree(
+        work, dest, previous if head_exists(work, previous) else None, source
+    )
+    if tree:
+        # Main's first parent is its previous HEAD: no force push or tree reset.
+        sha = cmd(
+            work, "commit-tree", tree, "-p", dest, "-p", source,
+            data=b"chore(mirror): apply safe upstream changes\n",
+        ).stdout.strip().decode("ascii")
+        cmd(work, "push", "github", f"{sha}:refs/heads/main")
+        print("main: updated only unmodified upstream-owned paths")
+    else:
+        print("main: no safe file updates")
+    return conflicts
 
 
 def mirror(source: str = SOURCE, destination: str = DESTINATION) -> None:
@@ -95,19 +151,26 @@ def mirror(source: str = SOURCE, destination: str = DESTINATION) -> None:
         cmd(work, "remote", "add", "upstream", source)
         cmd(work, "remote", "add", "github", destination)
         # All branches and tags, including upstream staging and historical tags.
-        cmd(work, "fetch", "--prune", "--force", "--tags", "upstream",
+        cmd(work, "fetch", "--no-tags", "upstream",
             "+refs/heads/*:refs/remotes/upstream/*")
         cmd(work, "fetch", "--no-tags", "github",
-            "+refs/heads/main:refs/remotes/github/main")
+            "+refs/heads/main:refs/remotes/github/main",
+            "+refs/heads/codeberg/*:refs/remotes/github/codeberg/*")
 
-        sync_main(work)
+        conflicts = sync_main(work)
         # Publish exact upstream commit IDs, not synthetic copies, and delete
         # stale codeberg/* refs in the destination if upstream removes them.
         cmd(work, "push", "--prune", "github",
             "+refs/remotes/upstream/*:refs/heads/codeberg/*")
-        # The destination is a dedicated mirror; its tags track Codeberg.
-        cmd(work, "push", "--prune", "github", "+refs/tags/*:refs/tags/*")
-        print("branches/tags: synchronized")
+        # Never prune the user's tags; own only the codeberg/ tag namespace.
+        cmd(work, "fetch", "--force", "--tags", "upstream")
+        cmd(work, "push", "--prune", "github",
+            "+refs/tags/*:refs/tags/codeberg/*")
+        for path, reason in conflicts:
+            print(f"CONFLICT: {os.fsdecode(path)}: {reason}")
+        if conflicts:
+            raise RuntimeError(f"Refusing to overwrite {len(conflicts)} user-modified paths")
+        print("branches/tags: synchronized; destination-only files preserved")
 
 
 if __name__ == "__main__":
