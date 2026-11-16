@@ -21,15 +21,32 @@ assert {[have_spec x86]}
 assert {[have_spec hw] || [have_spec nova]}
 
 
-if {[have_spec nova]} {
-	# enable logmem to get kernel logs in memory
-	proc kernel_output { } { return "logmem" }
+if { [have_cmd_switch --autopilot] } {
+
+	# Test mimic of sending wake up request works solely with Qemu
+	assert {[have_include power_on/qemu]} \
+		"Autopilot mode is not supported on this platform."
+
+	assert {[have_spec x86_64]}
 }
 
 
-# serial is not ever usable on hardware after resume, avoid hang by now
-if {![have_include "power_on/qemu"]} {
-	# switch off serial device usage by kernel and core
+# serial is known to work on Qemu after resume
+set use_serial [have_include "power_on/qemu"]
+
+if {[have_spec nova]} {
+	# enable logmem to get kernel logs in memory
+	proc kernel_output { } {
+		global use_serial
+		set kernel_config "logmem"
+		if { $use_serial } { append kernel_config " serial" }
+		return $kernel_config
+	}
+}
+
+
+# switch off serial, if not available after resume
+if {!$use_serial} {
 	proc boot_output { } { return "" }
 }
 
@@ -37,22 +54,22 @@ if {![have_include "power_on/qemu"]} {
 # non Intel machines have no GPU support, e.g. Qemu and AMD
 set board_non_intel [expr [have_include "power_on/qemu"]]
 
-set use_gpu_client 1
+set use_gpu_client 0
 set use_gpe "no"
 set use_ahci 0
 set use_nvme 0
-set use_wifi 1
-set use_usb 1
-set use_nic 1
+set use_usb  [expr ![have_cmd_switch --autopilot]]
+set use_nic  [expr ![have_cmd_switch --autopilot]]
+set use_wifi [expr ![have_cmd_switch --autopilot]]
 
-proc priority_timer    { } { return { | priority:  0 } }
-proc priority_base     { } { return { | priority: -1 } }
-proc priority_config   { } { return { | priority: -1 } }
-proc priority_gui      { } { return { | priority: -1 } }
-proc priority_wm       { } { return { | priority: -2 } }
-proc priority_log      { } { return { | priority: -2 } }
-proc priority_drivers  { } { return { | priority: -2 } }
-proc priority_scenario { } { return { | priority: -3 } }
+proc priority_timer    { } { return { | priority:  0} }
+proc priority_base     { } { return { | priority: -1} }
+proc priority_config   { } { return { | priority: -1} }
+proc priority_gui      { } { return { | priority: -1} }
+proc priority_wm       { } { return { | priority: -2} }
+proc priority_log      { } { return { | priority: -2} }
+proc priority_drivers  { } { return { | priority: -2} }
+proc priority_scenario { } { return { | priority: -3} }
 
 
 proc display_config { } {
@@ -66,7 +83,7 @@ proc display_config { } {
   |           + config | ld_verbose: yes | width: 1280 | height: 1024
   |             + report | connectory: yes
   |           + route
-  |             + any-service | + parent }
+  |             + any-service | + parent}
 	}
 
 	return {
@@ -77,7 +94,7 @@ proc display_config { } {
   |               + dir firmware | + tar pc_display_firmware.tar
   |             + report | connectory: yes
   |           + route
-  |             + any-service | + parent }
+  |             + any-service | + parent}
 }
 
 
@@ -92,7 +109,7 @@ proc usb_config { } {
   |           + binary pc_usb_host
   |           + route
   |             + service Report | + child report_rom
-  |             + any-service    | + parent }
+  |             + any-service    | + parent}
 }
 
 
@@ -117,6 +134,8 @@ proc restartable_drivers { } {
   |           + service Capture
   |           + service Event
   |           + service Gui
+  |           + service Usb_host
+  |           + service Uplink
 } [display_config] {
 } [input_config] {
 } [wifi_config] {
@@ -125,7 +144,7 @@ proc restartable_drivers { } {
   |         + start nano3d | caps: 100 | ram: 8M
   |           + route
   |             + any-service
-  |               + parent }
+  |               + parent}
 
 	return $return_drivers
 }
@@ -215,7 +234,7 @@ proc gui_config { } {
     | + child nitpicker
     + any-service
       + parent
-      + any-child }
+      + any-child}
 
 	return $return_gui
 }
@@ -243,7 +262,7 @@ proc input_config { } {
   |             | + parent
   |             + any-service
   |               + parent
-  |               + any-child }
+  |               + any-child}
 }
 
 
@@ -284,14 +303,14 @@ proc log_output { } {
     + any-service
       + parent
 
-+ start terminal | caps: 110 | ram: 6M } [priority_log] {
++ start terminal | caps: 130 | ram: 6M } [priority_log] {
   + provides
   | + service Terminal
   + config
   | + initial | width: 1200 | height: 780
   | + palette
-  | | + color | index: 0 | value: #2f3953
-  | | + color | index: 8 | value: #2f3953
+  |   + color 0 | fg: #2f3953
+  |   + color 8 | fg: #2f3953
   | + vfs
   |   + rom VeraMono.ttf
   |   + dir font
@@ -302,7 +321,7 @@ proc log_output { } {
     | + child wm
     + any-service
       + parent
-      + any-child }
+      + any-child}
 
 	append_if [have_spec nova] return_log {
 
@@ -316,7 +335,7 @@ proc log_output { } {
     + service Timer                           | + child timer
     + service PD                              | + parent
     + service CPU                             | + parent
-    + service LOG                             | + parent }
+    + service LOG                             | + parent}
 
 	return $return_log
 }
@@ -345,7 +364,7 @@ proc ahci_config { } {
     + service Report              | + child drivers_reports
     + any-service
       + parent
-      + any-child }
+      + any-child}
 
 	append return_ahci {
 
@@ -358,7 +377,7 @@ proc ahci_config { } {
     + service Block | + child ahci
     + any-service
       + parent
-      + any-child }
+      + any-child}
 
 	return $return_ahci
 }
@@ -389,7 +408,7 @@ proc nvme_config { } {
     + service Report              | + child drivers_reports
     + any-service
       + parent
-      + any-child }
+      + any-child}
 
 	append return_nvme {
 
@@ -403,7 +422,7 @@ proc nvme_config { } {
     | + child nvme
     + any-service
       + parent
-      + any-child }
+      + any-child}
 
 	return $return_nvme
 }
@@ -423,67 +442,17 @@ proc gpu_config { } {
   | + service Gpu
   | + service Dma
   | + service Platform
-  + config | system: yes
-  | + device
-  | |        vendor:      0x8086
-  | |        device:      0x1606
-  | |        generation:  8
-  | |        platform:    broadwell
-  | |        description: HD Graphics (BDW GT1 ULT)
-  | + device
-  | |        vendor:      0x8086
-  | |        device:      0x1616
-  | |        generation:  8
-  | |        platform:    broadwell
-  | |        description: HD Graphics 5500 (BDW GT2 ULT)
-  | + device
-  | |        vendor:      0x8086
-  | |        device:      0x1622
-  | |        generation:  8
-  | |        platform:    broadwell
-  | |        description: Iris Pro Graphics 6200 (BDW GT3e)
-  | + device
-  | |        vendor:      0x8086
-  | |        device:      0x1916
-  | |        generation:  9
-  | |        platform:    skylake
-  | |        description: HD Graphics 520 (Skylake, Gen9)
-  | + device
-  | |        vendor:      0x8086
-  | |        device:      0x191b
-  | |        generation:  9
-  | |        platform:    skylake
-  | |        description: HD Graphics 530 (Skylake, Gen9)
-  | + device
-  | |        vendor:      0x8086
-  | |        device:      0x5916
-  | |        generation:  9
-  | |        platform:    kabylake
-  | |        description: HD Graphics 620 (Kaby Lake, Gen9p5)
-  | + device
-  | |        vendor:      0x8086
-  | |        device:      0x5917
-  | |        generation:  9
-  | |        platform:    kabylake
-  | |        description: UHD Graphics 620 (Kaby Lake, Gen9p5)
-  | + device
-  | |        vendor:      0x8086
-  | |        device:      0x591b
-  | |        generation:  9
-  | |        platform:    kabylake
-  | |        description: HD Graphics 630 (Kaby Lake, Gen9p5)
-  | + device
-  | |        vendor:      0x8086
-  | |        device:      0x3ea0
-  | |        generation:  9
-  | |        platform:    whiskeylake
-  | |        description: UHD Graphics 620 (Whiskey Lake, Gen9p5)
-  | + device
-  |          vendor:      0x8086
-  |          device:      0x9a49
-  |          generation:  12
-  |          platform:    tigerlake
-  |          description: Iris Xe Graphics (Tiger Lake, Xe)
+  + config | max_framebuffer_memory: 64M
+  | + device | vendor: 0x8086 | device: 0x1606 | generation:   8 | platform: broadwell   | description: HD Graphics (BDW GT1 ULT)
+  | + device | vendor: 0x8086 | device: 0x1616 | generation:   8 | platform: broadwell   | description: HD Graphics 5500 (BDW GT2 ULT)
+  | + device | vendor: 0x8086 | device: 0x1622 | generation:   8 | platform: broadwell   | description: Iris Pro Graphics 6200 (BDW GT3e)
+  | + device | vendor: 0x8086 | device: 0x1916 | generation:   9 | platform: skylake     | description: HD Graphics 520 (Skylake, Gen9)
+  | + device | vendor: 0x8086 | device: 0x191b | generation:   9 | platform: skylake     | description: HD Graphics 530 (Skylake, Gen9)
+  | + device | vendor: 0x8086 | device: 0x5916 | generation:   9 | platform: kabylake    | description: HD Graphics 620 (Kaby Lake, Gen9p5)
+  | + device | vendor: 0x8086 | device: 0x5917 | generation:   9 | platform: kabylake    | description: UHD Graphics 620 (Kaby Lake, Gen9p5)
+  | + device | vendor: 0x8086 | device: 0x591b | generation:   9 | platform: kabylake    | description: HD Graphics 630 (Kaby Lake, Gen9p5)
+  | + device | vendor: 0x8086 | device: 0x3ea0 | generation:   9 | platform: whiskeylake | description: UHD Graphics 620 (Whiskey Lake, Gen9p5)
+  | + device | vendor: 0x8086 | device: 0x9a49 | generation:  12 | platform: tigerlake   | description: Iris Xe Graphics (Tiger Lake, Xe)
   + route
     + service Dma
     | + child platform | label: fb
@@ -493,7 +462,7 @@ proc gpu_config { } {
     | + child dynamic_rom
     + any-service
       + parent
-      + any-child }
+      + any-child}
 
 	return $return_gpu
 }
@@ -533,7 +502,7 @@ proc gpu_client { } {
     + service Gui                          | + child wm
     + service Timer                        | + child timer
     + service ROM | label: mesa_gpu.lib.so | + parent | label: mesa_gpu-iris.lib.so
-    + any-service                          | + parent }
+    + any-service                          | + parent}
 
 	return $return_gpu
 }
@@ -579,8 +548,9 @@ proc wifi_config { } {
   |           |   | + device | + log
   |           |   | + device | + null
   |           |   | + device | + rtc
-  |           |   | + device random  | + jitterentropy
-  |           |   | + device urandom | + jitterentropy
+  |           |   | + device entropy | + jitterentropy entropy
+  |           |   | + device random  | + xoroshiro | seed_path: /dev/entropy
+  |           |   | + device urandom | + xoroshiro | seed_path: /dev/entropy
   |           |   + dir firmware
   |           |     + tar wifi_firmware.tar
   |           + route
@@ -593,7 +563,7 @@ proc wifi_config { } {
   |             + service ROM | label: wifi_config       | + child config_rom
   |             + service ROM | label: wifi.lib.so       | + parent | label: pc_wifi.lib.so
   |             + service ROM | label: wifi_firmware.tar | + parent | label: pc_wifi_firmware.tar
-  |             + any-service | + parent }
+  |             + any-service | + parent}
 
 	return $return_wifi
 }
@@ -608,10 +578,12 @@ proc nic_config { } {
   |         + start nic | caps: 150 | ram: 16M
   |           + binary pc_nic
   |           + route
-  |             + service Uplink | + child nic_router
-  |             + any-service    | + parent }
+  |             + service Uplink | + parent
+  |             + any-service    | + parent}
 }
 
+
+if { ! [have_cmd_switch --autopilot] } {
 
 build {
 	core timer init lib/ld
@@ -627,16 +599,21 @@ build {
 	driver/ahci
 	driver/nvme
 	driver/rtc
+	server/nic_router
 	app/acpica
 	app/pci_decode
 	app/block_tester
 	lib/pc_intel_xe
 }
 
+}
+
 create_boot_directory
 
-import_from_depot [depot_user]/src/init \
+import_from_depot [depot_user]/src/[base_src] \
+                  [depot_user]/src/init \
                   [depot_user]/src/nitpicker \
+                  [depot_user]/src/nic_router \
                   [depot_user]/src/ps2 \
                   [depot_user]/pkg/themed_wm \
                   [depot_user]/pkg/terminal \
@@ -648,6 +625,12 @@ import_from_depot [depot_user]/src/init \
                   [depot_user]/src/nano3d \
                   [depot_user]/src/usb \
                   [depot_user]/src/log_core \
+                  [depot_user]/src/acpi \
+                  [depot_user]/src/acpica \
+                  [depot_user]/src/pc_platform \
+                  [depot_user]/src/pci_decode \
+                  [depot_user]/src/rom_filter \
+                  [depot_user]/src/vesa_fb \
                   [depot_user]/raw/pc_display_firmware
 
 if {$use_gpu_client} {
@@ -763,7 +746,12 @@ config | verbose: no | prio_levels: 4
 } [ ahci_config] {
 } [ nvme_config] {
 
-+ start usb | caps: 200 | ram: 1M
++ start nic_router | ram: 10M | caps: 300 } [priority_drivers] {
+  + provides
+    + service Nic
+    + service Uplink
+
++ start usb | caps: 200 | ram: 1M } [priority_drivers] {
   + provides
     + service Usb
     + service Usb_host
@@ -773,7 +761,7 @@ config | verbose: no | prio_levels: 4
     + service Platform | + child platform | label: usb
     + any-service      | + parent
 
-+ start drivers_init | caps: 10000 | ram: 128M } [priority_drivers] {
++ start drivers_init | caps: 10000 | ram: 192M } [priority_drivers] {
   + binary init
   + route
     + service Report                               | + child drivers_reports
@@ -788,6 +776,7 @@ config | verbose: no | prio_levels: 4
     + service Platform | label_prefix: nic ->      | + child platform | label: nic
     + service Platform | label_prefix: fb ->       | + child platform | label: fb
     + service Platform | label_prefix: usb ->      | + child platform | label: usb
+    + service Usb_host | label_prefix: usb ->      | + child usb      | label: usb
     + service Platform | label_prefix: intel_fb -> | + child gpu
     + service ROM | label: intel_fb -> intel_opregion
     | + child drivers_reports | label: intel_fb -> intel_opregion
@@ -813,7 +802,7 @@ config | verbose: no | prio_levels: 4
   |   + attribute verbose | value: no
   |   + if
   |     + has_value | input: check_system | value:
-  |     + then } [restartable_drivers] {
+  |     + then} [restartable_drivers] {
   |     + else
   |       + inline
   + route
@@ -929,7 +918,12 @@ build_boot_image [build_artifacts]
 # It seems that mch_mmconfig_setup should use I/O PCI access in order to
 # enable MMIO PCI MMCFG access.
 #
-append qemu_args "-smp 1"
+if {[have_spec nova]} { append qemu_args "-smp 1" }
+
+# with hw and smp 1 qemu quits silently, use more than one cpu
+if {[have_spec hw]}   { append qemu_args "-smp 2" }
+
+append qemu_args " -m 1024"
 
 if {[have_include "power_on/qemu"] && $use_ahci} {
 	append qemu_args " -device ahci,id=ahci "
@@ -963,4 +957,37 @@ if {$use_usb} {
 	append qemu_args " -device usb-mouse,bus=xhci.0"
 }
 
-run_genode_until forever
+if { [have_cmd_switch --autopilot] } {
+
+	run_genode_until {\[init -\> acpica\] prepare suspend S3.*\n} 30
+	set spawn_id $qemu_spawn_id
+
+	# send Ctrl-a+c to enter Qemu's monitor mode
+	send "\x01\x63"
+
+	# wait for monitor to become ready
+	run_genode_until {(qemu)} 25 $spawn_id
+
+        # wait until Genode guest got suspended by Qemu firmware
+	sleep 20
+
+	# debug info for post review
+	send "info status\n"
+	# wake Genode guest
+	send "system_wakeup\n"
+	# debug info for post review
+	send "info status\n"
+
+	# wait until framebuffer got re-startet and show good life sign
+	run_genode_until {\[init -\> drivers_init -\> fb] Found:.*\n} 30 $spawn_id
+
+	# check for bad output
+	grep_output {(requests resources: )|(Error)|(abort called)}
+
+	compare_output_to {}
+
+} else {
+
+	run_genode_until forever
+
+}

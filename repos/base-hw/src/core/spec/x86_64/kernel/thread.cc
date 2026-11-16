@@ -82,6 +82,7 @@ void Core_thread::Flush_and_stop_cpu::execute(Cpu &cpu)
 		cpu.suspend.typ_a = suspend.typ_a;
 		cpu.suspend.typ_b = suspend.typ_b;
 		cpu.next_state_suspend();
+		global_work_list.remove(&_le);
 		return;
 	}
 
@@ -95,6 +96,8 @@ void Core_thread::Flush_and_stop_cpu::execute(Cpu &cpu)
 
 void Cpu::Halt_job::Halt_job::load()
 {
+	_cpu().save_before_suspend();
+
 	switch (_cpu().state()) {
 	case HALT:
 		while (true) {
