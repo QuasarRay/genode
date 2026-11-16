@@ -254,6 +254,12 @@ void lx_emul_usb_client_rom_update(void)
 
 	/* add/remove devices */
 	if (usb_rom_task) lx_emul_task_unblock(usb_rom_task);
+
+	/*
+	 * If devices vanished, URBs might need to be canceled, therefore unblock
+	 * the URB handling task too
+	 */
+	lx_emul_usb_client_ticker();
 }
 
 

@@ -12,10 +12,8 @@
  * under the terms of the GNU Affero General Public License version 3.
  */
 
-#include <base/id_space.h>
 #include <base/heap.h>
 #include <base/tslab.h>
-#include <util/bit_allocator.h>
 #include <util/reconstructible.h>
 #include <util/list_model.h>
 #include <util/string.h>
@@ -24,6 +22,130 @@
 #include <genode_c_api/usb_client.h>
 
 using namespace Genode;
+
+/*
+ * We use a stripped down version of the Id_space here without a mutex,
+ * because we need to re-enter the space when different cooperatively
+ * scheduled user-tasks block inside the insertion of new device-requests
+ * and the handling of URBs.
+ */
+template <typename T>
+class Id_space : public Noncopyable
+{
+	public:
+
+		struct Id
+		{
+			unsigned long value;
+
+			bool operator == (Id const &other) const { return value == other.value; }
+
+			void print(Output &out) const { Genode::print(out, value); }
+		};
+
+		class Element : public Avl_node<Element>
+		{
+			private:
+
+				T        &_obj;
+				Id_space &_space;
+				Id        _id { 0 };
+
+				friend class Id_space;
+
+				Element *_lookup(Id id)
+				{
+					if (id.value == _id.value) return this;
+
+					Element *e = Avl_node<Element>::child(id.value > _id.value);
+
+					return e ? e->_lookup(id) : 0;
+				}
+
+				template <typename ARG>
+				void _for_each(auto const &fn) const
+				{
+					if (Avl_node<Element>::child(Avl_node_base::LEFT))
+						Avl_node<Element>::child(Avl_node_base::LEFT)->template _for_each<ARG>(fn);
+
+					fn(static_cast<ARG &>(_obj));
+
+					if (Avl_node<Element>::child(Avl_node_base::RIGHT))
+						Avl_node<Element>::child(Avl_node_base::RIGHT)->template _for_each<ARG>(fn);
+				}
+
+			public:
+
+				Element(T &obj, Id_space &space)
+				:
+					_obj(obj), _space(space)
+				{
+					_id = space._unused_id();
+					_space._elements.insert(this);
+				}
+
+				~Element()
+				{
+					_space._elements.remove(this);
+				}
+
+				bool higher(Element *other) { return other->_id.value > _id.value; }
+
+				Id id() const { return _id; }
+		};
+
+	private:
+ 
+		Avl_tree<Element> _elements { };
+		unsigned long     _cnt = 0;
+
+		Id _unused_id()
+		{
+			unsigned long _attempts = 0;
+			for (; _attempts < ~0UL; _attempts++, _cnt++) {
+
+				Id const id { _cnt };
+
+				/* another attempt if is already in use */
+				if (_elements.first() && _elements.first()->_lookup(id))
+					continue;
+
+				return id;
+			}
+			/*
+			 * The number of IDs exhausts the number of unsigned long values.
+			 * In this hypothetical case, accept ID ambiguities.
+			 */
+			return { ~0UL };
+		}
+
+	public:
+
+		template <typename ARG>
+		void for_each(auto const &fn) const
+		{
+			if (_elements.first())
+				_elements.first()->template _for_each<ARG>(fn);
+		}
+
+		template <typename ARG, typename FN>
+		auto apply(Id id, FN const &fn, auto const &missing_fn)
+		-> typename Trait::Functor<decltype(&FN::operator())>::Return_type
+		{
+			if (_elements.first())
+				if (Element *e = _elements.first()->_lookup(id))
+					return fn(static_cast<ARG &>(e->_obj));
+
+			return missing_fn();
+		}
+
+		~Id_space()
+		{
+			if (_elements.first())
+				error("ID space not empty at destruction time");
+		}
+};
+
 
 struct Device;
 
@@ -47,7 +169,7 @@ struct Endpoint : List_model<Endpoint>::Element
 };
 
 
-class Interface : public List_model<::Interface>::Element
+class Interface : ::Id_space<::Interface>::Element
 {
 	public:
 
@@ -73,19 +195,38 @@ class Interface : public List_model<::Interface>::Element
 
 			public:
 
-				Urb(::Interface                   &iface,
+				Urb(Usb::Interface                &iface,
 				    ::Endpoint                    &endp,
 				    genode_usb_client_iface_type_t type,
 				    size_t                         size,
 				    void                          *opaque_data)
 				:
 					Usb::Endpoint(endp.address, endp.attributes),
-					Usb::Interface::Urb(iface._session(), *this, _type(type),
+					Usb::Interface::Urb(iface, *this, _type(type),
 					                    size, 0),
 					_driver_data{opaque_data} {}
 		};
 
+		struct Element : List_model<Element>::Element
+		{
+			::Interface &interface;
+
+			Element(::Interface &iface) : interface(iface) {}
+
+			bool matches(Node const &n) const
+			{
+				uint8_t nr  = n.attribute_value<uint8_t>("number", 0xff);
+				uint8_t alt = n.attribute_value<uint8_t>("alt_setting", 0xff);
+				return interface._number == nr && interface._alt_setting == alt;
+			}
+
+			static bool type_matches(Node const &node) {
+				return node.has_type("interface"); }
+		};
+
 	private:
+
+		friend class Device;
 
 		Device                       &_device;
 		Constructible<Usb::Interface> _iface {};
@@ -98,17 +239,11 @@ class Interface : public List_model<::Interface>::Element
 		/* The interface's buffer size might be configureable in the future */
 		size_t _buf_size { 4096 * 128 };
 
-		Usb::Interface &_session();
+		Reconstructible<Element> _list_model_elem { *this };
 
 	public:
 
-		Interface(Device &device, Node const &n, Allocator &alloc)
-		:
-			_device(device),
-			_number(n.attribute_value<uint8_t>("number", 0xff)),
-			_alt_setting(n.attribute_value<uint8_t>("alt_setting", 0xff)),
-			_active(n.attribute_value("active", false)),
-			_slab(alloc) {}
+		Interface(Device &device, Node const &n, Allocator &alloc);
 
 		~Interface()
 		{
@@ -116,6 +251,8 @@ class Interface : public List_model<::Interface>::Element
 				_iface->dissolve_all_urbs<Urb>([&] (Urb &urb) {
 					destroy(_slab, &urb); });
 		}
+
+		void with_session(auto const &fn);
 
 		uint8_t number()      const { return _number; };
 		uint8_t alt_setting() const { return _alt_setting; };
@@ -157,7 +294,7 @@ class Interface : public List_model<::Interface>::Element
 		            genode_usb_client_consume_in_t       in,
 		            genode_usb_client_produce_out_isoc_t out_isoc,
 		            genode_usb_client_consume_in_isoc_t  in_isoc,
-		            genode_usb_client_complete_t         complete)
+		            auto const &complete)
 		{
 			if (!_iface.constructed())
 				return;
@@ -214,7 +351,7 @@ class Interface : public List_model<::Interface>::Element
 			});
 		}
 
-		void delete_all_urbs(genode_usb_client_complete_t complete)
+		void delete_all_urbs(auto const &complete)
 		{
 			if (!_iface.constructed()) return;
 
@@ -226,7 +363,7 @@ class Interface : public List_model<::Interface>::Element
 };
 
 
-class Device : public List_model<Device>::Element
+class Device
 {
 	public:
 
@@ -240,7 +377,7 @@ class Device : public List_model<Device>::Element
 
 			struct Driver_data { void * const data; } _driver_data;
 
-			Urb(Device  &device,
+			Urb(Usb::Device &device,
 			    uint8_t  request,
 			    uint8_t  request_type,
 			    uint16_t value,
@@ -249,10 +386,10 @@ class Device : public List_model<Device>::Element
 			    size_t   timeout,
 			    void    *opaque_data)
 			:
-				Usb::Device::Urb(device._device, request,
+				Usb::Device::Urb(device, request,
 				                 (Request_type::access_t)request_type,
 				                 value, index, size, timeout),
-				_driver_data{opaque_data} {}
+				_driver_data{opaque_data} { }
 
 			bool set_interface() const;
 
@@ -260,18 +397,36 @@ class Device : public List_model<Device>::Element
 			uint16_t value() const { return _value; }
 		};
 
+		struct Element : List_model<Element>::Element
+		{
+			Device &device;
+
+			Element(Device &dev) : device(dev) {}
+
+			bool matches(Node const &node) const {
+				return device._name == node.attribute_value("name", Name()); }
+
+			static bool type_matches(Node const &node) {
+				return node.has_type("device"); }
+		};
+
 	private:
 
-		Name                      const _name;
-		Speed                     const _speed;
-		Id_space<Device>::Element const _elem;
-		Usb::Device                     _device;
-		Signal_context_capability       _sigh_cap;
-		void                           *_driver_data { nullptr };
-		List_model<::Interface>         _ifaces {};
-		Tslab<Urb, 4096>                _slab;
+		Name                        const _name;
+		Speed                       const _speed;
+		::Id_space<Device>::Element const _elem;
+		Usb::Connection                  &_usb;
+		Env::Local_rm                    &_rm;
+		Allocator                        &_alloc;
+		Constructible<Usb::Device>        _device {};
+		Signal_context_capability         _sigh_cap;
+		void                             *_driver_data { nullptr };
+		Tslab<Urb, 4096>                  _slab;
 
-		enum State { AVAIL, REMOVED } _state { AVAIL };
+		::Id_space<::Interface> _space {};
+		List_model<::Interface::Element> _iface_model {};
+		Reconstructible<Element> _list_model_elem { *this };
+
 
 		/**
 		 * Noncopyable
@@ -280,45 +435,73 @@ class Device : public List_model<Device>::Element
 		Device &operator = (Device const &);
 
 		friend class Session;
+		friend class Interface;
 
 		void _delete_all_urbs(genode_usb_client_complete_t complete)
 		{
-			_device.dissolve_all_urbs<Urb>([&] (Urb &urb) {
+			if (!_device.constructed())
+				return;
+
+			_device->dissolve_all_urbs<Urb>([&] (Urb &urb) {
 				complete(urb._driver_data.data, NO_DEVICE);
+				urbs_in_flight--;
 				destroy(_slab, &urb);
 			});
 
-			_ifaces.for_each([&] (::Interface &iface) {
-				iface.delete_all_urbs(complete); });
+			auto iface_complete = [&] (void *opaque_data,
+			                           genode_usb_client_ret_val_t r) {
+				urbs_in_flight--;
+				complete(opaque_data, r);
+			};
+
+			_space.for_each<::Interface>([&] (auto &iface) {
+				iface.delete_all_urbs(iface_complete); });
 		}
 
 	public:
+
+		unsigned long urbs_in_flight = 0;
 
 		Device(Name                     &name,
 		       Speed                    &speed,
 		       Usb::Connection          &usb,
 		       Allocator                &alloc,
 		       Env::Local_rm            &rm,
-		       Id_space<Device>         &space,
+		       ::Id_space<Device>       &space,
 		       Signal_context_capability cap)
 		:
 			_name(name),
 			_speed(speed),
 			_elem(*this, space),
-			_device(usb, alloc, rm, name),
+			_usb(usb),
+			_rm(rm),
+			_alloc(alloc),
 			_sigh_cap(cap),
 			_slab(alloc)
-		{
-			_device.sigh(_sigh_cap);
-		}
+		{ }
 
 		~Device()
 		{
-			_device.dissolve_all_urbs<Urb>([&] (Urb &urb) {
-				destroy(_slab, &urb); });
+			_space.for_each<::Interface>([&] (auto &iface) {
+				destroy(_alloc, &iface); });
 		}
 
-		Usb::Device &session() { return _device; }
+		void acquire()
+		{
+			if (_device.constructed() || !_list_model_elem.constructed())
+				return;
+
+			_device.construct(_usb, _alloc, _rm, _name);
+			_device->sigh(_sigh_cap);
+		}
+
+		void with_session(auto const &fn)
+		{
+			if (!_list_model_elem.constructed())
+				return;
+
+			if (_device.constructed()) fn(*_device);
+		}
 
 		Name name() { return _name; }
 
@@ -344,12 +527,6 @@ class Device : public List_model<Device>::Element
 
 		Allocator &slab() { return _slab; }
 
-		bool matches(Node const &node) const {
-			return _name == node.attribute_value("name", Name()); }
-
-		static bool type_matches(Node const &node) {
-			return node.has_type("device"); }
-
 		void set_interface(uint16_t index, uint16_t value);
 
 		void update(Allocator &alloc, Node const &node)
@@ -368,20 +545,28 @@ class Device : public List_model<Device>::Element
 			};
 
 			with_active_config(node, [&] (Node const &active_config) {
-				_ifaces.update_from_node(active_config,
+				_iface_model.update_from_node(active_config,
 
 					/* create */
-					[&] (Node const &node) -> ::Interface & {
-						return *new (alloc) ::Interface(*this, node, alloc); },
+					[&] (Node const &node) -> ::Interface::Element & {
+						auto &iface =
+							*new (alloc) ::Interface(*this, node, alloc);
+						return *iface._list_model_elem;
+					},
 
 					/* destroy */
-					[&] (::Interface &iface) {
+					[&] (::Interface::Element &e) {
+						auto &iface = e.interface;
 						iface.update(alloc, Node());
-						destroy(alloc, &iface); },
+						iface._list_model_elem.destruct();
+
+						if (!iface._iface.constructed())
+							destroy(alloc, &iface);
+					},
 
 					/* update */
-					[&] (::Interface &iface, Node const &node) {
-						iface.update(alloc, node); }
+					[&] (::Interface::Element &e, Node const &node) {
+						e.interface.update(alloc, node); }
 				);
 			});
 		}
@@ -392,12 +577,24 @@ class Device : public List_model<Device>::Element
 		            genode_usb_client_consume_in_isoc_t  in_isoc,
 		            genode_usb_client_complete_t         complete)
 		{
-			if (_state == REMOVED) {
+			if (!_device.constructed())
+				return;
+
+			auto iface_complete = [&] (void *opaque_data,
+			                           genode_usb_client_ret_val_t r) {
+				urbs_in_flight--;
+				complete(opaque_data, r);
+			};
+
+			_space.for_each<::Interface>([&] (auto &iface) {
+				iface.update(out, in, out_isoc, in_isoc, iface_complete); });
+
+			if (!_list_model_elem.constructed()) {
 				_delete_all_urbs(complete);
 				return;
 			}
 
-			_device.update_urbs<Urb>(
+			_device->update_urbs<Urb>(
 
 				/* produce out content */
 				[&] (Urb &urb, Byte_range_ptr &dst) {
@@ -433,17 +630,15 @@ class Device : public List_model<Device>::Element
 					};
 
 					complete(urb._driver_data.data, ret);
+					urbs_in_flight--;
 					destroy(_slab, &urb);
 				});
-
-			_ifaces.for_each([&] (::Interface &iface) {
-				iface.update(out, in, out_isoc, in_isoc, complete); });
 		}
 
 		template <typename FN>
 		void with_active_interfaces(FN const &fn)
 		{
-			_ifaces.for_each([&] (::Interface &iface) {
+			_space.for_each<::Interface>([&] (auto &iface) {
 				if (iface.active()) fn(iface); });
 		}
 };
@@ -455,8 +650,9 @@ struct Session
 	Allocator                &_alloc;
 	Signal_context_capability _handler_cap;
 	Usb::Connection           _usb { _env, _env.ep() };
-	List_model<Device>        _model {};
-	Id_space<Device>          _space {};
+	::Id_space<Device>        _space {};
+
+	List_model<Device::Element> _device_model {};
 
 	Session(Env &env, Allocator &alloc, Signal_context_capability io_cap,
 	        Signal_context_capability rom_cap)
@@ -467,37 +663,46 @@ struct Session
 		update_model();
 	}
 
-	~Session() {
-		_model.for_each([&] (Device &dev) { destroy(_alloc, &dev); }); }
+	~Session()
+	{
+		_space.for_each<Device>([&] (auto &dev) {
+			destroy(_alloc, &dev); });
+	}
 
 	void update_model()
 	{
 		_usb.with_node([&] (Node const &node) {
-			_model.update_from_node(node,
+			_device_model.update_from_node(node,
 
 				/* create */
-				[&] (Node const &node) -> Device &
+				[&] (Node const &node) -> Device::Element &
 				{
 					Device::Name name =
 						node.attribute_value("name", Device::Name());
-						Device::Speed speed =
+					Device::Speed speed =
 						node.attribute_value("speed", Device::Speed());
 					Device &dev = *new (_alloc)
 						Device(name, speed, _usb, _alloc, _env.rm(),
 						       _space, _handler_cap);
-					return dev;
+					return *dev._list_model_elem;
 				},
 
 				/* destroy */
-				[] (Device &dev)
+				[&] (Device::Element &elem)
 				{
-					dev._state = Device::REMOVED;
+					auto &dev = elem.device;
+
+					dev.update(_alloc, Node());
+					dev._list_model_elem.destruct();
+
+					if (!dev._device.constructed())
+						destroy(_alloc, &dev);
 				},
 
 				/* update */
-				[&] (Device &dev, Node const &node)
+				[&] (Device::Element &elem, Node const &node)
 				{
-					dev.update(_alloc, node);
+					elem.device.update(_alloc, node);
 				}
 			);
 		});
@@ -510,50 +715,52 @@ struct Session
 	void update(genode_usb_client_dev_add_t add,
 	            genode_usb_client_dev_del_t del)
 	{
-		/* delete devices marked as removed  */
-		while (true) {
+		_space.for_each<Device>([&] (Device &dev) {
 
-			bool found = false;
-			genode_usb_client_dev_handle_t handle;
-
-			_space.for_each<Device>([&] (Device &dev) {
-				if (dev._state == Device::REMOVED) {
-					handle = dev.handle();
-					found = true;
-				}
-			});
-
-			if (!found) break;
-
-			auto remove = [&] (Device &dev)
-			{
-				if (dev.driver_data()) del(dev.handle(), dev.driver_data());
-				dev.update(_alloc, Node());
-				destroy(_alloc, &dev);
-			};
-
-			_space.apply<Device>({ handle }, remove, [] (){});
-		}
-
-		/* add new devices */
-		_model.for_each([&] (Device &dev) {
-			if (!dev.driver_data())
+			/* add new devices */
+			if (!dev.driver_data() && !dev._device.constructed()) {
+				dev.acquire();
 				dev.driver_data(add(dev.handle(), dev.name().string(), dev.speed()));
+			}
+
+			/* delete devices marked as removed  */
+			if (!dev._list_model_elem.constructed() &&
+			    !dev.urbs_in_flight) {
+				if (dev.driver_data()) del(dev.handle(), dev.driver_data());
+				destroy(_alloc, &dev);
+				return;
+			}
 		});
 	}
 };
 
 
-Usb::Interface &::Interface::_session()
+void ::Interface::with_session(auto const &fn)
 {
+	if (!_list_model_elem.constructed())
+		return;
+
 	if (!_iface.constructed()) {
-		_iface.construct(_device.session(),
-		                 Usb::Interface::Index{_number, _alt_setting},
-		                 _buf_size);
-		_iface->sigh(_device.sigh_cap());
+		_device.with_session([&] (auto &session) {
+			_iface.construct(session,
+			                 Usb::Interface::Index{_number, _alt_setting},
+			                 _buf_size);
+			_iface->sigh(_device.sigh_cap());
+		});
 	}
-	return *_iface;
+
+	if (_iface.constructed()) fn(*_iface);
 };
+
+
+::Interface::Interface(Device &device, Node const &n, Allocator &alloc)
+:
+	::Id_space<::Interface>::Element(*this, device._space),
+	_device(device),
+	_number(n.attribute_value<uint8_t>("number", 0xff)),
+	_alt_setting(n.attribute_value<uint8_t>("alt_setting", 0xff)),
+	_active(n.attribute_value("active", false)),
+	_slab(alloc) {}
 
 
 bool Device::Urb::set_interface() const
@@ -566,7 +773,8 @@ bool Device::Urb::set_interface() const
 
 void Device::set_interface(uint16_t index, uint16_t value)
 {
-	_ifaces.for_each([&] (::Interface &iface) {
+	_space.for_each<::Interface>([&] (auto &iface) {
+
 		if (iface.number() != index)
 			return;
 		iface.active(iface.alt_setting() == value);
@@ -618,14 +826,20 @@ genode_usb_client_device_control(genode_usb_client_dev_handle_t handle,
 			return NO_DEVICE;
 
 		return _usb_session->_space.apply<Device>({ handle },
-		                                          [&] (Device &device) {
-			new (device.slab())
-				Device::Urb(device, request, request_type,
-				            value, index, size, timeout, opaque_data);
-			return OK;
-		});
-	} catch(Id_space<Device>::Unknown_id&) {
-		return NO_DEVICE;
+			[&] (Device &device) {
+				auto result = NO_DEVICE;
+				device.with_session([&] (auto &session) {
+					new (device.slab())
+						Device::Urb(session, request, request_type,
+						            value, index, size, timeout, opaque_data);
+						device.urbs_in_flight++;
+						result = OK;
+				});
+				return result;
+			},
+			[] {
+				return NO_DEVICE;
+			});
 	} catch(...) {
 		return NO_MEMORY;
 	}
@@ -643,9 +857,9 @@ genode_usb_client_device_update(genode_usb_client_produce_out_t      out,
 	try {
 		if (!_usb_session)
 			return;
-		_usb_session->_model.for_each([&] (Device &device) {
-			device.update(out, in, out_isoc, in_isoc, complete); });
 
+		_usb_session->_space.for_each<Device>([&] (Device &dev) {
+			dev.update(out, in, out_isoc, in_isoc, complete); });
 	} catch(...) { }
 }
 
@@ -662,22 +876,25 @@ genode_usb_client_iface_transfer(genode_usb_client_dev_handle_t handle,
 		if (!_usb_session)
 			return NO_DEVICE;
 
-		genode_usb_client_ret_val_t ret = NO_DEVICE;
-
-		_usb_session->_space.apply<Device>({ handle },
-		                                   [&] (Device &device) {
-			device.with_active_interfaces([&] (::Interface &iface) {
-				iface.with_endpoint(index, [&] (Endpoint &endp) {
-					new (iface.slab())
-						::Interface::Urb(iface, endp, type, size, opaque_data);
-					ret = OK;
+		return _usb_session->_space.apply<Device>({ handle },
+			[&] (Device &device) {
+				auto result = NO_DEVICE;
+				device.with_active_interfaces([&] (::Interface &iface) {
+					iface.with_endpoint(index, [&] (Endpoint &endp) {
+						iface.with_session([&] (auto &session) {
+							new (iface.slab())
+								::Interface::Urb(session, endp, type, size,
+							                     opaque_data);
+							device.urbs_in_flight++;
+							result = OK;
+						});
+					});
 				});
+				return result;
+			},
+			[] {
+				return NO_DEVICE;
 			});
-		});
-
-		return ret;
-	} catch(Id_space<Device>::Unknown_id&) {
-		return NO_DEVICE;
 	} catch(...) {
 		return NO_MEMORY;
 	}
