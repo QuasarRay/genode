@@ -24,20 +24,20 @@ using namespace Genode;
 
 int Elf_binary::_ehdr_check_compat()
 {
-	Elf_Ehdr *ehdr = (Elf_Ehdr *)_start;
+	auto const &ehdr = *reinterpret_cast<Elf_Ehdr *>(_start);
 
-	if (memcmp(ehdr, ELFMAG, SELFMAG) != 0) {
+	if (memcmp(&ehdr, ELFMAG, SELFMAG) != 0) {
 		error("binary is not an ELF");
 		return -1;
 	}
 
-	if (ehdr->e_ident[EI_CLASS] != ELFCLASS) {
+	if (ehdr.e_ident[EI_CLASS] != ELFCLASS) {
 		error("support for 32/64-bit objects only");
 		return -1;
 	}
 
 	/* start executeables and shared objects with entry points only */
-	if (!(ehdr->e_type == ET_EXEC || (ehdr->e_type == ET_DYN && ehdr->e_entry))) {
+	if (!(ehdr.e_type == ET_EXEC || (ehdr.e_type == ET_DYN && ehdr.e_entry))) {
 		error("program is no executable");
 		return -1;
 	}
@@ -76,51 +76,59 @@ int Elf_binary::_ph_table_check_compat()
 
 Elf_segment Elf_binary::get_segment(unsigned num)
 {
-	void *start;
-	size_t offset, filesz, memsz;
-	Elf_binary::Flags flags;
-
 	if (!valid()) return Elf_segment();
 
 	if (!(num < _phnum)) return Elf_segment();
 
-	Elf_Phdr *phdr = &((Elf_Phdr *)_ph_table)[num];
+	auto phdr_typed = [&](auto const &phdr)
+	{
+		auto start  = (void *)phdr.p_vaddr;
+		auto offset = phdr.p_offset;
+		auto filesz = phdr.p_filesz;
+		auto memsz  = phdr.p_memsz;
 
-	start  = (void *)phdr->p_vaddr;
-	offset = phdr->p_offset;
-	filesz = phdr->p_filesz;
-	memsz  = phdr->p_memsz;
+		Elf_binary::Flags flags;
 
-	flags.r = (phdr->p_flags & PF_R) ? true : false;
-	flags.w = (phdr->p_flags & PF_W) ? true : false;
-	flags.x = (phdr->p_flags & PF_X) ? true : false;
+		flags.r = (phdr.p_flags & PF_R) ? true : false;
+		flags.w = (phdr.p_flags & PF_W) ? true : false;
+		flags.x = (phdr.p_flags & PF_X) ? true : false;
 
-	/*
-	 * Skip loading of ELF segments that are not PT_LOAD or have no memory
-	 * size.
-	 */
-	if (phdr->p_type != PT_LOAD || !memsz)
-		flags.skip = true;
+		/*
+		 * Skip loading of ELF segments that are not PT_LOAD or have no memory
+		 * size.
+		 */
+		if (phdr.p_type != PT_LOAD || !memsz)
+			flags.skip = true;
 
-	return Elf_segment(this, start, offset, filesz, memsz, flags);
+		return Elf_segment(this, start, offset, filesz, memsz, flags,
+		                   phdr.p_paddr);
+	};
+
+	auto const &phdr = ((Elf_Phdr *)_ph_table)[num];
+	return phdr_typed(phdr);
 }
 
 
 Elf_binary::Elf_binary(addr_t start)
 : _valid(false), _dynamic(false), _interp(false), _start(start)
 {
-	Elf_Ehdr *ehdr = (Elf_Ehdr *)start;
-
 	/* check for unsupported ELF features */
 	if (_ehdr_check_compat()) return;
 
+	auto const &ehdr = *reinterpret_cast<Elf_Ehdr *>(start);
+
+	auto const entry = ehdr.e_entry;
+	auto const phoff = ehdr.e_phoff;
+	auto const phnum = ehdr.e_phnum;
+	auto const phent = ehdr.e_phentsize;
+
 	/* program entry point */
-	if (!(_entry = ehdr->e_entry)) return;
+	if (!(_entry = entry)) return;
 
 	/* segment tables */
-	_ph_table  = _start + ehdr->e_phoff;
-	_phentsize = ehdr->e_phentsize;
-	_phnum     = ehdr->e_phnum;
+	_ph_table  = _start + phoff;
+	_phentsize = phent;
+	_phnum     = phnum;
 
 	/* program segments */
 	if (_ph_table_check_compat()) return;
