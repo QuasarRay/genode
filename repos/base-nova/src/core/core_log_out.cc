@@ -15,16 +15,37 @@
 #include <core_log.h>
 
 /* Genode includes */
-#include <bios_data_area.h>
 #include <drivers/uart/x86_pc.h>
+#include <util/reconstructible.h>
 
-void Core::Core_log::out(char const c)
+using namespace Genode;
+
+
+X86_uart &uart(uint16_t ioport = 0)
 {
 	enum { CLOCK = 0, BAUDRATE = 115200 };
 
-	static X86_uart uart(Bios_data_area::singleton()->serial_port(),
-	                     CLOCK, BAUDRATE);
+	static Constructible<X86_uart> serial { };
+
+	if (ioport)
+		serial.destruct();
+
+	if (!serial.constructed())
+		serial.construct(ioport, CLOCK, BAUDRATE);
+
+	return *serial;
+}
+
+
+void Core::init_core_uart(uint16_t port)
+{
+	uart(port);
+}
+
+
+void Core::Core_log::out(char const c)
+{
 	if (c == '\n')
-		uart.put_char('\r');
-	uart.put_char(c);
+		uart().put_char('\r');
+	uart().put_char(c);
 }

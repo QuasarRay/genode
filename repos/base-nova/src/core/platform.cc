@@ -338,6 +338,7 @@ Core::Platform::Platform()
 	using Genode::PAGE_SIZE_LOG2;
 
 	bool warn_reorder  = false;
+	bool warn_exclude  = false;
 	bool error_overlap = false;
 
 	Hip const &hip = *(Hip *)__initial_sp;
@@ -357,16 +358,10 @@ Core::Platform::Platform()
 	/* locally map the whole I/O port range */
 	enum { ORDER_64K = 16 };
 	map_local_one_to_one(*__main_thread_utcb, Io_crd(0, ORDER_64K), _core_pd_sel);
-	/* map BDA region, console reads IO ports at BDA_VIRT_ADDR + 0x400 */
-	enum { BDA_PHY = 0x0U, BDA_VIRT = 0x1U, BDA_VIRT_ADDR = 0x1000U };
-	map_local_phys_to_virt(*__main_thread_utcb,
-	                       Mem_crd(BDA_PHY,  0, Rights(true, false, false)),
-	                       Mem_crd(BDA_VIRT, 0, Rights(true, false, false)),
-	                       _core_pd_sel);
-
 
 	/*
-	 * Now that we can access the I/O ports for comport 0, printf works...
+	 * Now that we can access the I/O ports, we may initialize a UART by
+	 * Core::init_core_uart(...);
 	 */
 
 
@@ -379,14 +374,6 @@ Core::Platform::Platform()
 	              (addr_t)main_thread_utcb(), 1, Rights(true, true, false))) {
 		error("could not remap utcb of main thread");
 	}
-
-	/*
-	 * Mark successful boot of hypervisor for automatic tests. This must be
-	 * done before core_log is initialized to prevent unexpected-reboot
-	 * detection.
-	 */
-	log("\nHypervisor ", String<sizeof(hip.signature)+1>((char const *)&hip.signature),
-	    " (API v", hip.api_version, ")");
 
 	/* init genode cpu ids based on kernel cpu ids (used for syscalls) */
 	warn_reorder = !hip.remap_cpu_ids(map_cpu_ids,
@@ -424,8 +411,11 @@ Core::Platform::Platform()
 
 	auto exclude_from_core = [&] (addr_t start, size_t num_bytes)
 	{
-		if (region_alloc().remove_range(start, num_bytes).failed())
-			warning("unable to exclude core-local range ", Hex_range(start, num_bytes));
+		if (region_alloc().remove_range(start, num_bytes).ok())
+			return;
+
+		warning("unable to exclude core-local range ", Hex_range(start, num_bytes));
+		warn_exclude = true;
 	};
 
 	exclude_from_core(core_virt_beg, core_size);
@@ -433,9 +423,6 @@ Core::Platform::Platform()
 	/* ROM modules are un-used by core - de-detach region */
 	addr_t const binaries_size  = binaries_end - binaries_beg;
 	unmap_local(*__main_thread_utcb, binaries_beg, binaries_size >> 12);
-
-	/* preserve Bios Data Area (BDA) in core's virtual address space */
-	exclude_from_core(BDA_VIRT_ADDR, 0x1000);
 
 	/* preserve stack area in core's virtual address space */
 	exclude_from_core(stack_area_virtual_base(), stack_area_virtual_size());
@@ -452,7 +439,6 @@ Core::Platform::Platform()
 	/* sanity checks */
 	addr_t check [] = {
 		reinterpret_cast<addr_t>(__main_thread_utcb), CORE_PAGER_UTCB_ADDR,
-		BDA_VIRT_ADDR
 	};
 
 	for (unsigned i = 0; i < sizeof(check) / sizeof(check[0]); i++) { 
@@ -512,8 +498,11 @@ Core::Platform::Platform()
 
 	auto exclude_from_ram = [&] (addr_t start, size_t num_bytes)
 	{
-		if (ram_alloc().remove_range(start, num_bytes).failed())
-			warning("unable to exclude RAM range ", Hex_range(start, num_bytes));
+		if (ram_alloc().remove_range(start, num_bytes).ok())
+			return;
+
+		warning("unable to exclude RAM range ", Hex_range(start, num_bytes));
+		warn_exclude = true;
 	};
 
 	struct Range { addr_t start; addr_t size; };
@@ -566,6 +555,30 @@ Core::Platform::Platform()
 
 		exclude_from_ram((addr_t)base, (size_t)size);
 	}
+
+	/* init uart based upon preboot info */
+	if (preboot.size) {
+		auto pages = (round_page(preboot.size) >> 12) + 1;
+		auto preboot_ptr = (char *)_map_pages(preboot.start, pages);
+
+		Const_byte_range_ptr range((const char *)preboot_ptr, preboot.size);
+		Node(range).with_optional_sub_node("boot", [&](auto const &boot) {
+			boot.with_optional_sub_node("uart", [&](auto const &uart) {
+				Core::init_core_uart(uint16_t(uart.attribute_value("ioport", 0U)));
+			});
+		});
+
+		unmap_local(*__main_thread_utcb, mword_t(preboot_ptr), pages);
+		region_alloc().free(preboot_ptr);
+	}
+
+	/*
+	 * Mark successful boot of hypervisor for automatic tests. This must be
+	 * done before core_log is initialized to prevent unexpected-reboot
+	 * detection.
+	 */
+	log("\nHypervisor ", String<sizeof(hip.signature)+1>((char const *)&hip.signature),
+	    " (API v", hip.api_version, ")");
 
 	/* needed as I/O memory by the VESA driver */
 	(void)_io_mem_alloc.add_range(0, 0x1000);
@@ -788,6 +801,8 @@ Core::Platform::Platform()
 		error("memory overlap issues detected");
 	if (hip.sel_exc + 3 > NUM_INITIAL_PT_RESERVED)
 		error("configuration error (NUM_INITIAL_PT_RESERVED)");
+	if (warn_exclude)
+		error("RAM and/or region excludes failed");
 
 	/* map idle SCs */
 	auto const log2cpu      = log2(hip.cpu_max(), 0u);

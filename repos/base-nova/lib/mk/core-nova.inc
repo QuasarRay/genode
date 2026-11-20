@@ -37,7 +37,6 @@ SRC_CC      += stack_area.cc \
                region_map_component.cc \
                rom_session_component.cc \
                thread_start.cc \
-               bios_data_area.cc \
                trace_session_component.cc \
                signal_transmitter_noinit.cc \
                vm_session_component.cc \

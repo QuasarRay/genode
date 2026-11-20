@@ -27,6 +27,7 @@ namespace Core {
 		addr_t size;
 	};
 
+	void init_core_uart(uint16_t ioport);
 	void init_core_log(Core_log_range const &);
 }
 
