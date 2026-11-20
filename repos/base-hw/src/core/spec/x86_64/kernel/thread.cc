@@ -116,7 +116,10 @@ void Cpu::Halt_job::Halt_job::load()
 			/* all CPUs signaled that they are stopped, trigger ACPI suspend */
 			Hw::Acpi::Fadt fadt(acpi_fadt_addr);
 
-			/* ack all GPEs, otherwise we may wakeup immediately */
+			/* handle all GPEs and PM status to avoid waking up immediately */
+			fadt.prepare_pm1_for_suspend();
+			fadt.clear_gpe0_enable();
+			fadt.clear_gpe1_enable();
 			fadt.clear_gpe0_status();
 			fadt.clear_gpe1_status();
 
@@ -154,17 +157,6 @@ Cpu_suspend_result Core_thread::_call_cpu_suspend(unsigned sleep_type)
 
 	if (!acpi_fadt_addr || !cpu_count)
 		return Cpu_suspend_result::FAILED;
-
-	if (_stop_cpu.constructed()) {
-		if (_stop_cpu->cpus_left) {
-			Genode::raw("kernel: resume still ongoing");
-			return Cpu_suspend_result::FAILED;
-		}
-
-		/* remove & destruct Flush_and_stop_cpu object */
-		_stop_cpu.destruct();
-		return Cpu_suspend_result::OK;
-	}
 
 	auto const sleep_typ_a = uint8_t(sleep_type);
 	auto const sleep_typ_b = uint8_t(sleep_type >> 8);
