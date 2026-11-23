@@ -1,0 +1,544 @@
+
+
+              ===============================================
+              Release notes for the Genode OS Framework 26.11
+              ===============================================
+
+                               Genode Labs
+
+
+
+On this year's [https://genode.org/about/road-map - roadmap], we stated the
+building of bridges as overarching motive for 2026. This final release of the
+year presents the culmination of these efforts in the form of an SDK that is
+able to run directly on Genode, and Sculpt OS in particular. Development
+workflows that were previously contained in Linux VMs can now be cultivated
+directly under Genode. This endeavor required both the porting of all the
+tools we love using every day as well as nurturing Genode's POSIX emulation to
+a level that is able to carry these loads.
+(Section [Goa SDK hosted directly on Sculpt OS])
+
+As the second highlight, the release takes Genode's concept of pluggable
+drivers - that we previously applied for
+[https://genode.org/documentation/release-notes/24.02#Revised_audio_infrastructure - audio],
+[https://genode.org/documentation/release-notes/21.02#Pluggable_network_device_drivers - networking],
+[https://genode.org/documentation/release-notes/20.08#New__Capture__and__Event__session_interfaces - display, and input] -
+to USB, effectively taking the liveliness of the USB host-controller driver
+off the critical path of applications depending on USB, which is a huge gain
+in terms of fail-safety (Section [Microkernelized USB]).
+
+The release is rounded off by new support for Intel Panther-Lake platforms,
+USB audio, and the completed transition from XML to Genode's custom HID syntax.
+
+
+Microkernelized USB
+###################
+
+USB support has a long history within the Genode OS framework.
+Starting with a simple monolithic approach in
+[https://genode.org/documentation/release-notes/9.05#USB_support - 2009], it has
+[https://genode.org/documentation/release-notes/18.08#Decomposed_USB_stack - evolved]
+into a hierarchy of lots of distinct components.
+There are separate components to drive a specific USB interface class like
+mass-storage or Human-Interface Devices (HID), either written from scratch,
+ported from Linux, or using a port of the libusb library. Additionally, the
+virtual-machine monitors VirtualBox and Seoul can pass through whole USB
+devices to guest OSes by re-using a Qemu-based USB host-controller model.
+
+All those distinct components drive different USB devices that might be
+connected to one and the same bus. The link between those different USB device
+drivers is the USB multiplexer. Up until now, the multiplexer interacted
+directly with the USB host-controller hardware that arbitrates the actual bus
+access.
+
+[image usb_layered]
+  The USB host driver as a complex single point of failure
+
+To take this design to the extreme, we've now extracted the USB
+host-controller driver out of the USB multiplexer. Similar to the GUI and
+network multiplexers, the USB multiplexer component has become a pure
+policy-driven control unit that is hardware independent. Whereby all
+hardware-specific driver implementation details reside in client components of
+the USB multiplexer, including complex protocols, quirks, and heuristics. The
+most welcome and interesting side effect of this change is that the lifetime
+of a device-client is no longer dependent on the lifetime of the USB
+host-controller driver. A failure or scheduled shutdown of such driver no
+longer results in an implicit destruction of the client component. From the
+client's perspective, it looks like the device has vanished momentarily, just
+the same as when the device gets unplugged.
+
+[image pluggable_usb_host]
+  The USB host driver having become pluggable
+
+New USB host service
+--------------------
+
+To realize communication between the new USB multiplexer and drivers of USB
+host-controller hardware, a new interface is now provided by the "Usb_host"
+service. The former "Usb" service interface remains unaffected, and USB-device
+clients follow the same protocol as before.
+
+Clients of the host service and the multiplexer communicate via two
+shared-memory buffers. One dataspace that is mutable by the client is used
+to announce all USB devices a host client has detected to the multiplexer.
+This report contains all necessary information including valid device
+configurations, their interfaces and endpoints. Whenever a new device gets
+plugged, or an existing one vanished, the dataspace content is updated by
+the client, and the multiplexer is informed via an RPC-call.
+
+The second dataspace is immutable by the client and contains requests of the
+multiplexer to either acquire or release a device, or one of its interfaces.
+Each request contains an ID that is used by the client to obtain additional
+ingredients used to establish a communication channel by the device-client
+that wants to drive a device or interface. The host client collects a
+dataspace and signal-context per device resp. interface channel from the
+multiplexer using the ID of the request. When a channel is established, the
+host-client informs the multiplexer via RPC-call about the finalization of the
+acquisition request. And vice versa, the host-client informs about a finished
+release request after cleaning up its communication channel.
+
+Both data channels, the device-announcement, and the multiplexer-requests are
+represented as human-inclined data. The actual USB protocol data does not flow
+between the multiplexer and the host-client, but directly between host- and
+device-clients.
+
+More participants, strong control, but zero-copy
+------------------------------------------------
+
+Obviously, extracting the USB host-controller driver part out of the USB
+multiplexer, and assigning it a new client-role increases the complexity of
+the interplay. Now there are at least three instead of two components
+involved. But the complexity of the USB multiplexer gets decreased, which is
+the anchor that all other related components depend on. Also, the USB
+multiplexer is only involved in the setup and the teardown of communication
+relations of host-controller drivers and device-clients. Dependent on its
+configuration, it presents parts of the announced devices to its device
+clients. It acts upon the dynamics of its policy and the presence of devices.
+Being the owner of all communication buffers, it can withdraw them at any
+time, thereby effectively cutting any relation. Moreover, when establishing a
+new communication channel, the multiplexer requests a DMA-capable memory
+buffer on behalf of the USB host-controller, whose device got requested.
+This DMA buffer, which is designated as communication buffer between the
+host-controller driver and the device client, provides the opportunity to
+follow a zero-copy approach.
+
+One USB device with several clients
+-----------------------------------
+
+Until now, it was not possible to assign one and the same USB device to
+different device-clients, even though those clients drive distinct interfaces.
+This has changed now. The new USB multiplexer allows for the assignment of one
+device to multiple clients under the condition that the clients behave
+cooperatively and do not mutually affect each other. For example, we
+experimentally assigned a USB headset to the USB HID and the USB Audio driver
+concurrently, and successfully received button events while playing music.
+Nevertheless, device sharing is still in a highly experimental state. It is
+not predictable what happens if different clients do not behave cooperatively.
+Additional safety nets are planned for the upcoming release, such that it will
+be possible to assign one primary (privileged) device-client and less
+privileged secondary roles.
+
+
+Goa SDK hosted directly on Sculpt OS
+####################################
+
+For several years, all developers in the Genode team have been using Sculpt OS
+as a daily driver but had to rely on the assistance of virtual machines for
+Genode development. Hosting heavy workloads natively on Sculpt is still an
+ongoing effort. The Falkon web browser is a prominent example of the
+transformation from using virtual machines as crutches towards running those
+workloads directly on Sculpt.
+
+By hosting the Goa SDK directly on Sculpt OS 26.10, we continue on our theme
+of "eating our own dog food" that originally spurred Sculpt OS in the first
+place. It constitutes an essential milestone that enables an on-target
+development workflow without the help of a development VM.
+
+If you followed our road map and past release notes, you will have noticed
+that this was not a low-hanging fruit. The endeavor included porting a bouquet
+of Unix tools - such as CMake, Sequoia PGP, expect - stressing our C runtime
+and VFS with their interoperation. The porting efforts were greatly assisted
+by the off-target version of the Goa SDK and - in turn - not only left their
+mark on Genode-world (Section [Libraries and applications]) but also on the
+Goa SDK itself (Section [Goa SDK]).
+
+Sculpt 26.10.1 comes with a ready-to-use preset for the Goa SDK, which you can
+find introduced in the following article.
+
+:Goa SDK hosted on Sculpt OS 26.10:
+
+  [https://genodians.org/nfeske/2026-11-25-goa-sdk]
+
+
+Base framework and OS-level infrastructure
+##########################################
+
+Completed transition from XML to HID
+====================================
+
+With the current release, we celebrate the completed transition from XML to
+Genode's custom HID (human-inclined data) format. After first having presented
+the [https://genodians.org/nfeske/2024-12-20-moving-on-from-xml - idea] two
+years ago, we introduced the format as an optional alternative to XML into the
+framework
+[https://genode.org/documentation/release-notes/25.08#Consideration_of_a_lean_alternative_to_XML - mid of last year].
+Since then, we gradually moved the framework to the new format, refined it
+according to the practical experiences made with using HID in Sculpt OS,
+complemented additional
+[https://genode.org/documentation/release-notes/26.02#Human-inclined_data__HID__format_by_default - tooling],
+and ultimately settled on it as default. During the current release cycle, we
+removed the last traces of XML and ultimately removed XML support from the
+base framework.
+
+The 'Node' and 'Generator' types are now hardwired to HID syntax.
+The 'Node::Attribute' type now matches the former 'Hid_node::Attribute'
+type, which merely aggregates two spans for tag and value, no longer
+using a buffered 'String' for the tag (formerly 'name'). Hence, direct
+users of the 'Attribute' type have to be adjusted.
+
+The XML parser and generator are preserved at _libports/include/xml/_ as
+the _node.h_ and _generator.h_ headers and the code at _libports/src/lib/xml/_.
+The tests for 'Xml_node' and 'Xml_generator' have also been moved to libports.
+For users desiring interoperability between XML and HID, we enriched those
+tests by showcasing the conversion between the formats in both directions.
+
+Offline data processing
+-----------------------
+
+The use of XML and HID side by side is also demonstrated by a new version of
+our
+[https://genode.org/documentation/release-notes/19.08#Flexible_keyboard_layouts - keyboard-layout generator]
+tool at _tool/xkb2chargen_. The tool has become able to output XML and HID.
+! $ xkb2chargen hid de nodeadkeys de_DE.UTF-8 > de_DE.chargen
+! $ xkb2chargen xml de nodeadkeys de_DE.UTF-8 > de_DE.chargen
+
+Since it is written in C++, it serves as a nice example of using Genode's
+_util/hid.h_ API for offline data processing.
+Speaking of the API, the tool motivated the extension of the 'Generator'
+interface with the ability to generate documentation lines and annotations.
+The new 'Generator::doc' methods allow for adding comments following a dot
+prefix. Mirroring the interface of 'append_quoted', such comments can span
+entire lines, or can be appended to a line using tabular mode.
+
+Convention for geometric attributes
+-----------------------------------
+
+Throughout Genode, 2D-geometric attributes are consistently named 'xpos',
+'ypos', 'width', and 'height'. While using HID, in particular when leveraging
+its tabular style, the length of these names tends to horizontally inflate
+tables containing geometric information, e.g., window layouts or the data
+model for rendering dialogs. Hence, we plan to change the convention to the
+consistent use of 'x', 'y', 'w', and 'h'. As a preparatory step, the geometric
+utilities 'Point', 'Area', and 'Rect' have become able to understand both
+flavors whereas the large names are still generated by default. The next
+release will change this default to the short names.
+
+
+VFS consolidation
+=================
+
+Genode's virtual file-system (VFS) library has received continuous attention
+over the year with the current release being no exception. After having
+attained the ability for dynamically changing the file-system structure in
+version
+[https://genode.org/documentation/release-notes/26.08#Reconfigurable_virtual_file_system - 26.08],
+we focused on the tightening of the API, optimizations, and code quality.
+
+Given that the VFS originated from our early attempt at a Unix-like runtime
+called
+[https://genode.org/documentation/release-notes/11.02#Noux_-_an_execution_environment_for_the_GNU_userland - Noux],
+its interfaces were closely modeled after POSIX, passing 'flags' here and
+there, and using error codes rather loosely. The current release leaves those
+legacies behind by consistently applying sumtype-based error handling,
+addressing distinct operations by separate methods instead of evaluating
+flags, and reducing state.
+
+The formerly distinct 'File_system', 'File_io_service', and
+'Directory_service' types have been consolidated into the single 'File_system'
+type. The former 'Vfs_handle' type has been removed. Its purpose is now
+covered by the 'File_channel' and 'Dir_channel' types that target file I/O and
+directory-entry readout. Directory entries are now read in batches by default.
+
+The new 'File_system::mkdir' operation replaces the former create flag of
+'opendir' for creating directories and updating their timestamps. It thereby
+reduces the functionality of dir handles to the mere reading of directory
+entries. As a side effect of this change, the _os/vfs.h_ utilities 'New_file'
+and 'Append_file' take the present time stamp as additional argument now.
+This argument is currently applied to compound directories if created.
+Later it may naturally also be applied to the file itself.
+
+Following the pattern of 'mkdir', the new 'File_system::symlink' operation
+creates and updates symbolic links. Symlinks can no longer be opened but
+merely read by using the new 'File_system::follow' operation. Given a path,
+this operation returns the target of a symlink alongside the index of the
+dereferenced path element. Hence, it can directly be used for resolving
+symlinks along paths without using stat.
+
+The distinction between "transactional" and "continuous" files has been
+largely removed. The former CONTINUOUS_FILE and TRANSACTIONAL_FILE are now
+denoted as 'Dirent_type::FILE' and 'Dirent_type::DEVICE'. The latter is only
+used by the special new 'device' file system (see below).
+
+Device file system
+------------------
+
+Everyone familiar with [https://p9f.org/ - Plan9] knows that Unix' mantra
+"everything is a file" is a sweet lie. In particular, device files are mere
+makeup covering rather arbitrary 'ioctl' programming interfaces. Genode's VFS
+follows the spirit of Plan9, strictly modeling device features as individual
+files subsumed in a device directory. When combining the VFS with a POSIX
+layer like Genode's libc, however, POSIX dictates that a device is a single
+file. The new device file system bridges this gap.
+
+For example, when mounting a Genode terminal in the VFS
+! + vfs
+!   + dir dev
+!     + dir tty
+!        + terminal
+the resulting directory structure looks as follows.
+! /dev/tty/data        <- for reading and writing
+! /dev/tty/info
+! /dev/tty/rows        <- terminal geometry
+! /dev/tty/columns
+! /dev/tty/interrupts  <- for receiving Ctrl-C
+
+A POSIX program like the bash shell does not know how to work with these
+files. Instead, it expects _/dev/tty_ being a pseudo file that supports
+certain 'ioctl' operations like TIOCGETA. This is where the 'device' file
+system enters the picture. When wrapping the 'terminal' in a 'device' instead
+of a 'dir'
+! + vfs
+!   + dir dev
+!     + device tty
+!        + terminal
+the resulting directory structure becomes
+! /dev/tty              <- Dirent_type::DEVICE
+! /dev/.tty/data
+! /dev/.tty/info
+! /dev/.tty/rows
+! /dev/.tty/columns
+! /dev/.tty/interrupts
+The device directory still exists but it is moved out of view. The additional
+'/dev/tty' pseudo file is marked as a device, which hints Genode's libc at the
+existence of the sibling device directory. Furthermore, file I/O targeted at
+'/dev/tty' is transparently redirected to the 'data' file of the wrapped
+device directory.
+
+With this convention in place, the libc's implementation of 'ioctl' is able
+to translate operations like TIOCGETA or TIOCGWINSZ to regular file accesses
+of the various pseudo files.
+
+In short, to make VFS nodes palatable to POSIX software, we merely need to
+wrap them into 'device' nodes while being able to keep the VFS untainted from
+the historic fallacy 'ioctl'.
+
+
+C runtime
+=========
+
+Emulation of procfs
+-------------------
+
+POSIX software sometimes relies on _/proc/self/_ as a reflection mechanism,
+for example to look up the path referred to by a given file descriptor.
+To ease the porting of such software, we added a very basic emulation of
+procfs to the libc.
+
+When provided with a 'proc: /proc' attribute, the libc uses the given
+directory (backed by a RAM file system) to emulate selected features of a
+procfs. In particular, it emulates _/proc/self/fd_, which can be symlinked to
+/dev/fd. Files in _/dev/fd/_ indicate what files or directories are open.
+Bash, e.g., uses this for process substitution such as
+
+! $ cat <(echo "foobar")
+
+In this example, the output of 'echo foobar' is written into a pipe.
+The read channel of the pipe is made available at _/dev/fd/63_.
+The latter is then provided as an argument to 'cat'.
+
+Under the hood, the libc creates a subdirectory in _/proc_ for every PID and
+resolves _/proc/self_ as an alias to _/proc/<PID>_. For the emulation of
+_/proc/self/fd_, the libc will create/delete symlinks pointing to the original
+path whenever a file descriptor is created/destroyed.
+
+
+Mimicking 'setuid', 'seteuid', 'setreuid', and 'setgid'
+-------------------------------------------------------
+
+Even though Genode has no notion of user IDs and group IDs, we want to make
+ported POSIX software feel at home as much as possible. Hence, we implemented
+pragmatic support for accessing user and group IDs as defined in the
+configuration of the libc. Note that there is no differentiation between real
+and effective user/group IDs. Moreover, ID changes are always permitted.
+
+
+Supplemented 'readlinkat', 'renameat', 'unlinkat', 'mkdirat', 'symlinkat'
+-------------------------------------------------------------------------
+
+Those '*at' variants of directory operations work relative to a given file
+descriptor. This part of POSIX was previously not covered by Genode's libc.
+
+
+Libraries and applications
+##########################
+
+During the current release cycle, we have gradually turned the aging ports
+within the legacy section of
+[https://codeberg.org/genodelabs/genode-world - Genode-world] into up-to-date
+Goa projects suited for regular maintenance. This went hand in hand with the
+removal of obsolete ports.
+
+As an interim step - to avoid duplicated APIs - we clearly marked existing
+ports within Genode's main repository that otherwise would clash with Goa
+projects by adding a _-minimal_ suffix. This denotes their purpose as specific
+dependencies for components in the Genode main repository that should not be
+used by external components, especially not by freshly created Goa projects.
+This treatment concerns the curl, OpenSSL, and Mesa libraries - while we are
+still in the process of cutting the ties with the Mesa library.
+
+The following list contains all components removed from Genode-world legacy:
+
+chrony, drill, getdns, gnutls, grpc, ldns, libevent, libsndfile, lzlib,
+nettle, openvpn, protobuf, scrcpy, ssh_server, and stubby.
+
+On the other hand, the following ports were added as new Goa projects:
+
+Mesa3D-24.0.8, SDL2-2.32.10, SDL2_image-2.8.12, SDL2_mixer-2.8.2,
+SDL2_net-2.4.0, SDL2_ttf-2.24.0, cmake-4.4.3, file-5.48, flac-1.5.0,
+glmark2, groff-1.23.0, gzip-1.15, libffi-3.8.0, libmad-0.16.4, libogg-1.3.6,
+libpipeline-1.5.8, libvorbisfile-1.37, man-db-2.13.1, opus-1.6.1,
+opusfile-0.12 patch-2.8, pcre2-10.47, pkgconf-3.0.7, wget-1.5.0, and
+xz-5.8.4.
+
+For the time being, as apparent by its version, the Mesa3D Goa project
+remains at the same version as _mesa-minimal_ in the Genode main repository
+for compatibility reasons. It is currently only used by glmark2.
+
+A noteworthy change in the updated SDL2 port is the freshly introduced OpenGL
+opt-in option. SDL2-based components that want to make use of hardware
+acceleration must specify their desire by setting the 'opengl' attribute in
+their 'config' node to 'yes'. This change frees SDL2-based components relying
+on software-rendering from the otherwise required Gpu service and _mesa_gpu_
+connection.
+
+The already existing sqlite project has been renamed to sqlite3 to ease
+porting software that determines the presence of the library by probing for
+sqlite3.
+
+Other new Goa projects, including cmake, wget, and various archiver tools, are
+part of the on-target Goa SDK that allows for the building of Goa projects
+directly on Sculpt OS.
+
+
+Device drivers
+##############
+
+With release 26.11, we extended our Linux SOF driver port, introduced in
+[https://genode.org/documentation/release-notes/26.05#Intel_Sound_Open_Firmware - 26.05],
+with support for the audio subsystem found on Panther-Lake platforms, and
+thus, are covering recent Intel-based laptops.
+
+The Intel display-driver port to Genode got extended to support Panther-Lake
+notebooks. Our port used to be based on the Intel i915 driver, which does not
+support newer generations anymore. Therefore, we enabled the Linux Intel/Xe
+driver. During this enablement it became apparent that we cannot integrate
+both drivers within one executable binary, since both re-use the same display
+implementations with data of different memory layouts. Indeed, the Linux
+configuration forces the Intel/Xe display driver as separate kernel module,
+and it is not possible to build it into the kernel statically. Therefore, we
+decided to model the Intel/Xe module as a distinct shared library and extended
+our DDE-Linux framework in this respect. With that approach, we achieved
+running both i915 and XE within one component. The driver got tested
+successfully with HP Panther-Lake notebooks and is already part of the Sculpt
+26.10 release.
+
+A new Linux USB audio-driver port named 'usb_audio' for arm_v8a and x86_64
+platforms has become available now. It uses Genode's play and record session
+interfaces and was successfully tested with a variety of different USB audio
+class 1 and 2 devices. It expects an explicit configuration similar to the
+'pc_audio' driver component, where for each device, the desired settings
+(e.g., sample-rate, number of channels, and sample bit-depth) have to be
+specified. For more information please have a look at the
+[https://codeberg.org/genodelabs/genode/src/branch/main/repos/dde_linux/src/driver/usb_audio/README - documentation]
+and the exemplary
+[https://codeberg.org/genodelabs/genode/src/branch/main/repos/dde_linux/run/usb_audio.run - run script].
+
+
+Platforms
+#########
+
+Genode's custom kernel (base-hw)
+================================
+
+CPU affinities can be expressed in the configuration of the Genode framework
+since
+[https://genode.org/documentation/release-notes/13.08#Management_of_CPU_affinities - 2013].
+The affinity-space is two-dimensional. Adjacency in that space should
+naturally correspond to physical closeness of CPU cores. Up until now, the
+affinity-space offered by our custom kernel was flat and only supported
+different x-values, as opposed to the NOVA micro-hypervisor variant, which
+considers the presence or absence of Symmetric-Multi-Threading (SMT) on x86
+platforms to either provide one or more values on the y-axis. Thereby, related
+SMT-cores share the same x-value.
+Although the distribution of SMT is diminishing, due to its inherent security
+concerns, we decided to implement the very same topology pattern for base-hw
+too. This way affinity-space configurations stay consistent when switching
+in between both kernels.
+
+
+Build system and tooling
+########################
+
+Goa SDK
+=======
+
+As a consequence of the intensified use of Goa within Genode-world and the
+on-target SDK, Goa has seen a few little changes that add up to a more
+streamlined experience.
+
+First and foremost, Goa now allows CMake, autoconf, make, cargo, and Meson to
+use pkg-config for detecting libraries and their particular include
+directories. For this purpose, Goa scans API archives for *.pc files, copies
+them to a project-local _pkgconfig_ directory and replaces DEPOT_API_DIR with
+the directory of the API archive before starting the build process. The *.pc
+files are also used for populating the auto-generated CMake module files -
+introduced in
+[https://genode.org/documentation/release-notes/26.05#Goa_SDK - 26.05] -
+with the appropriate include directories. Resorting to pkg-config for querying
+include directories of ported 3rd-party libraries eventually allowed us to
+remove library-specific quirks from Goa.
+
+Moreover, while porting additional tools and libraries, we noticed that
+some 3rd-party projects support multiple build systems. However, Goa's
+auto-detection lacked a mechanism to let the user choose what build system
+to pick. Now, the presence of a '*_args' file such as _cmake_args_ or
+_meson_args_ in the project directory allows the user not only to supply the
+corresponding build system with custom arguments but also to disarm Goa's
+heuristic build-system detection and enforce the use of a particular build
+system.
+
+Last, as a minor change motivated by our ambition to restrict file operations
+by Goa to a list of safe paths, we decided to reject any symlinks for Goa's
+project files/directories (e.g. _used_apis_ or _pkg/archives_). Symlinks are
+still allowed inside the _src/_ directory, though.
+
+You may switch to the new version of Goa with the 'update-goa' command:
+
+! $ goa update-goa 26.10
+
+
+HID processing
+==============
+
+In many situations, attribute values need to be incrementally adjusted rather
+than replaced. Think of the upgrading of quotas or bumping a version
+attribute. We equipped _/tool/hid_ with a new 'incr' command as a variant of
+the existing 'set' command that increments the attribute value(s) instead of
+replacing them. Increments can be negative and can have a fractional part
+separated by a dot. Non-number portions of existing attribute values are
+preserved. For example,
+
+! $ hid incr 'config | + start vfs | : ram: 8' <input-file>
+
+If the original 'ram' attribute value was '16M', the command would change it
+to '24M'.
