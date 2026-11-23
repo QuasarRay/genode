@@ -195,6 +195,12 @@ void Platform_thread::restart()
 }
 
 
+void Platform_thread::resume()
+{
+	Kernel::thread_resume(*_kobj);
+}
+
+
 void Platform_thread::fault_resolved(Untyped_capability cap, bool resolved)
 {
 	Kernel::thread_pager_signal_ack(Capability_space::capid(cap), *_kobj, resolved);
