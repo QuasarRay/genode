@@ -56,6 +56,12 @@ void Cpu_thread_component::single_step(bool enabled)
 
 void Cpu_thread_component::resume()
 {
+	/*
+	 * In case the thread is in a page fault, remove it from faulter queue, it may
+	 * fault again later
+	 */
+	_address_space_region_map.discard_faulter(_rm_client, true);
+
 	_platform_thread.resume();
 }
 

@@ -60,6 +60,8 @@ class Core::Region_map_component : public Rpc_object<Region_map>,
 
 		Fault fault() override { return { }; }
 
+		void discard_faulter(Rm_client &, bool) { }
+
 		Dataspace_capability dataspace() override { return Dataspace_capability(); }
 
 		Rm_dataspace_component *dataspace_component() { return nullptr; }
