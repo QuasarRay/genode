@@ -38,14 +38,27 @@ void operator delete (void *, unsigned long) { return; }
 
 void Genode::sleep_forever()
 {
-	while (true) {
+	while (true)
 		asm volatile("hlt");
-	}
 }
 
 
-void Genode::raise(Genode::Unexpected_error)
+void Genode::raise(Genode::Unexpected_error e)
 {
-	Genode::error(__func__, " unexpected error");
+	switch (e) {
+	case Unexpected_error::INDEX_OUT_OF_BOUNDS:
+		error("unexpected attempt to use out-of-bounds index");
+		break;
+
+	case Unexpected_error::ACCESS_UNCONSTRUCTED_OBJ:
+		error("unexpected attempt to access unconstructed object");
+		break;
+
+	case Unexpected_error::NONEXISTENT_SUB_NODE:
+	case Unexpected_error::IPC_BUFFER_EXCEEDED:
+		Genode::error(__func__, " unexpected error ", int(e));
+		break;
+	}
+
 	Genode::sleep_forever();
 }
