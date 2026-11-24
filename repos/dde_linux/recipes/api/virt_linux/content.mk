@@ -46,6 +46,9 @@ LX_FILE_LISTS       := $(LX_FILES_VIRT_LINUX)
 LX_FILES_LXIP := $(shell find -H $(REP_DIR)/src/lib/lxip -name dep.list -or -name source.list)
 LX_FILE_LISTS += $(LX_FILES_LXIP)
 
+LX_FILES_USB_AUDIO := $(shell find -H $(REP_DIR)/src/driver/usb_audio -name dep.list -or -name source.list)
+LX_FILE_LISTS      += $(LX_FILES_USB_AUDIO)
+
 LX_FILES_USB_HID := $(shell find -H $(REP_DIR)/src/driver/usb_hid -name dep.list -or -name source.list)
 LX_FILE_LISTS    += $(LX_FILES_USB_HID)
 

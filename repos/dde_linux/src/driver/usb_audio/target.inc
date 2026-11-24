@@ -1,0 +1,34 @@
+TARGET  = usb_audio
+LIBS    = base jitterentropy virt_lx_emul
+
+REL_PRG_DIR = $(PRG_DIR)/../..
+INC_DIR = $(REL_PRG_DIR) $(REP_DIR)/src/lib/usb_client
+
+SRC_C += dummies.c \
+         lx_emul.c \
+         lx_user.c
+
+SRC_C += $(notdir $(wildcard $(PRG_DIR)/generated_dummies.c))
+
+SRC_C += lx_emul/virt/shadow/drivers/usb/core/buffer.c
+SRC_C += lx_emul/virt/shadow/drivers/usb/core/hcd.c
+SRC_C += lx_emul/virt/usb_client.c
+
+SRC_CC = main.cc audio.cc
+
+SRC_CC += lx_emul/event.cc \
+          lx_emul/random.cc
+
+SRC_CC += genode_c_api/usb_client.cc
+
+vpath %.c  $(PRG_DIR)
+vpath %.c  $(REL_PRG_DIR)
+vpath %.cc $(REL_PRG_DIR)
+vpath %.c  $(REP_DIR)/src/lib
+vpath %.cc $(REP_DIR)/src/lib
+
+C_API = $(dir $(call select_from_repositories,src/lib/genode_c_api))
+
+vpath genode_c_api/usb_client.cc $(C_API)
+
+# vim: set ft=make :

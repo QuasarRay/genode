@@ -1,0 +1,112 @@
+The 'usb_audio' driver component is a port of the Linux driver for USB
+audio devices.
+
+The driver exposes the mixer controls for all channels and devices in
+its 'mixer' report that shares the format with the driver's configuration.
+
+At the moment it will only drive one device at a time and devices have
+to be (un-)plugged in sequence to be recognized. It is undefined, which
+device is choosen should multiple be available at the same time.
+
+
+Testing
+=======
+
+The simplest way to test the driver is by executing the 'usb_audio.run'
+run-script found in 'repos/dde_linux/run':
+
+! make KERNEL=hw BOARD=pc run/usb_audio
+
+The run-script is configured in a way that all devices and mixer controls
+are reported and already contains the configuration profiles for a
+variety of different devices, denoted by vendor and product ID.
+Skim the available profiles and look for one that could match your device. In
+case there is none or it is inconclusive inspect the reports and create a
+profile yourself (see Configuration section).
+
+By default the run-script routes the microphone input to the Play session
+and thus acts as a monitor.
+
+
+Configuration
+=============
+
+The driver is configured by setting the appriopriate mixer controls and
+audio devices. Since these can differ between varying devices the settings
+are organized in profiles.
+
+A profile contains a 'devices' node that specifies which devices should
+be used for external/internal playback and external/internal recording.
+It also contains the mixer controls that are managed by the driver for
+switching between external/internal playback and recording automatically
+(see Jack handling for more information).
+
+Furthermore, the 'playback' and 'capture' node are required for setting
+the proper sample-rate, number of channels as well as bits per sample,
+e.g.:
+
+! + playback | samplerate: 48000 | channels: 2 | samplebits: 16
+! + capture  | samplerate: 16000 | channels: 1 | samplebits: 16
+
+The driver uses the mandatory 'vendor_id' and 'product_id' attribute to match
+an existing profile to a specific device. This allows for pre-configuring
+the driver for a variety of different devices and swapping them at run-time.
+
+Changing a profile at run-time is not supported and may result in faulty
+behavior; use the 'record_play_mixer' component to adjust the volume at
+run-time.
+
+
+Devices
+~~~~~~~
+
+In order to obtain a complete list of all devices encountered by the
+driver enable
+
+! config | report_devices: true
+
+in the configuration node of the audio driver.
+
+The most common devices are 'pcm0C0D0c' (recording) and 'pcmC0D0p'
+(playback).
+
+
+Mixer controls
+~~~~~~~~~~~~~~
+
+The 'profile' node of the driver takes 'control' nodes as configuration inputs
+which can be configured at runtime. There are three types of controls: integer,
+boolean, and enumeration:
+
+* Example for Integer:
+
+! control Headphone Playback Volume | id: 0 | channel: 0 | type: int | value: 87 | min: 0 | max: 87
+! control Headphone Playback Volume | id: 0 | channel: 1 | type: int | value: 87 | min: 0 | max: 87
+
+This lets you configure the volume of the headphone playback for the left (0)
+and right (1) channel. "min" and "max" indicate the supported range of the
+"value" argument.
+
+* Example for Boolean:
+
+! control Headphone Playback Switch | id: 1 | channel: 0 | type: bool | value: true
+! control Headphone Playback Switch | id: 1 | channel: 1 | type: bool | value: true
+
+Boolean values are usually switches to turn on/off playback or recording. In
+this example both playback channels of the headphone are enabled.
+
+* Example for Enumeration:
+
+! control Input Source  | id: 10 | type: enum | selected: 0
+! + value Headset Mic   | id: 0
+! + value Headphone Mic | id: 1
+! -
+
+Enumeration controls let's you select from 2 or more values (value-nodes).
+Here the headset microphone is selected by the "selected" attribute.
+
+In order to obtain a complete list of all controls enable
+
+! config | report_mixer: true
+
+in the configuration node of the audio driver.

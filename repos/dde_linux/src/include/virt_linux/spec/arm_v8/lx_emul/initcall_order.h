@@ -1,7 +1,7 @@
 /*
  * \brief  Array defining order of Linux Kernel initcalls
  * \author Automatically generated file - do no edit
- * \date   2026-01-14
+ * \date   2026-11-20
  */
 
 #pragma once
@@ -84,6 +84,8 @@ static const char * lx_emul_initcall_order[] = {
 	"__initcall_usb_init4",
 	"__initcall_input_init4",
 	"__initcall_power_supply_class_init4",
+	"__initcall_init_soundcore4",
+	"__initcall_alsa_sound_init4",
 	"__initcall_net_dev_init4",
 	"__initcall_neigh_init4",
 	"__initcall_fib_notifier_init4",
@@ -157,6 +159,7 @@ static const char * lx_emul_initcall_order[] = {
 	"__initcall_usb_serial_module_init6",
 	"__initcall_usb_serial_module_init6",
 	"__initcall_usb_serial_module_init6",
+	"__initcall_usb_serial_module_init6",
 	"__initcall_input_leds_init6",
 	"__initcall_evdev_init6",
 	"__initcall_smccc_devices_init6",
@@ -174,6 +177,11 @@ static const char * lx_emul_initcall_order[] = {
 	"__initcall_mt_driver_init6",
 	"__initcall_wacom_driver_init6",
 	"__initcall_hid_init6",
+	"__initcall_alsa_hwdep_init6",
+	"__initcall_alsa_timer_init6",
+	"__initcall_alsa_pcm_init6",
+	"__initcall_alsa_rawmidi_init6",
+	"__initcall_usb_audio_driver_init6",
 	"__initcall_sock_diag_init6",
 	"__initcall_failover_init6",
 	"__initcall_gre_offload_init6",
@@ -198,6 +206,7 @@ static const char * lx_emul_initcall_order[] = {
 	"__initcall_amba_stub_drv_init7s",
 	"__initcall_clk_disable_unused7s",
 	"__initcall_of_platform_sync_state_init7s",
+	"__initcall_alsa_sound_last_init7s",
 	"__initcall_con_initcon",
 	"__initcall_end",
 	"__initcall_hvc_console_initcon",

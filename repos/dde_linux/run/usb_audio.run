@@ -1,0 +1,294 @@
+#
+# \brief  Test for using USB Audio
+# \author Stefan Kalkowski
+# \date   2012-07-06
+#
+
+assert {[have_spec arm_64] || [have_spec x86_64]}
+
+create_boot_directory
+import_from_depot [depot_user]/src/[base_src] \
+                  [depot_user]/pkg/test_usb_host-[board] \
+                  [depot_user]/src/libc \
+                  [depot_user]/src/record_play_mixer \
+                  [depot_user]/src/report_rom \
+                  [depot_user]/src/vfs \
+                  [depot_user]/src/init \
+                  [depot_user]/src/usb_audio
+
+build { driver/usb_audio test/audio_play }
+
+install_config {
+config | verbose: yes
+
++ parent-provides
+  + service CPU
+  + service IO_MEM
+  + service IO_PORT
+  + service IRQ
+  + service LOG
+  + service PD
+  + service RM
+  + service ROM
+
++ default-route
+  + any-service
+    + parent
+    + any-child
+
++ default | caps: 200 | ram: 1M
+
++ start timer
+  + provides
+    + service Timer
+
++ start report_rom | caps: 120 | ram: 2M
+  + provides
+    + service Report
+    + service ROM
+  + config | verbose: no
+    + policy | label_prefix: usb | report: usb -> usb -> devices
+    + policy | label: mixer -> | report: usb -> usb -> devices
+  + route
+    + any-service
+      + parent
+
++ start usb | caps: 1500 | ram: 32M | managing_system: yes
+  + binary init
+  + provides | + service Usb
+  + route
+    + service ROM   | label: config | + parent | label: drivers.config
+    + service Timer                 | + child timer
+    + service Report                | + child report_rom
+    + any-service                   | + parent
+
++ start mixer_report_rom
+  + binary report_rom
+  + provides
+    + service Report
+    + service ROM
+  + config | verbose: yes
+    + default-policy | report: audio_drv -> mixer
+
++ start mixer | ram: 2M
+  + binary record_play_mixer
+  + provides
+    + service Record
+    + service Play
+  + config | jitter_ms: 10
+    + mix left
+      + play | label_suffix: -> mic_left | volume: 1.0
+      + play | label_suffix: -> left     | volume: 0.5
+    + mix right
+      + play | label_suffix: -> mic_right | volume: 1.0
+      + play | label_suffix: -> right     | volume: 0.5
+    + policy | label_suffix: left  | record: left  | volume: 1.0
+    + policy | label_suffix: right | record: right | volume: 1.0
+  + route
+    + service Report | + child mixer_report_rom
+    + service Timer  | + child timer
+    + any-service
+      + parent
+
++ start usb_audio | ram: 6M | caps: 150
+  + config | report_mixer: yes | report_devices: yes | speaker_priority: internal | mic_priority: internal
+    + profile Plantronics Blackwire 5220 Series | vendor_id: 0x047f | product_id: 0xc053
+      + devices | playback:     pcmC0D0p
+                | mic_internal: pcmC0D0c
+                | speaker_internal_id: 4
+                | mic_internal_id:     6
+      + playback | samplerate: 48000 | channels: 2 | samplebits: 16
+      + capture  | samplerate: 48000 | channels: 1 | samplebits: 16
+      x control Capture Channel Map      | id: 0 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map     | id: 1 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map     | id: 1 | channel: 1 | type: int  | value: 0 | min: 0 | max: 36
+      + control Sidetone Playback Switch | id: 2 | channel: 0 | type: bool | value: false
+      + control Sidetone Playback Volume | id: 3 | channel: 0 | type: int  | value: 44 | min: 0 | max: 60
+      x control Headset Playback Switch  | id: 4 | channel: 0 | type: bool | value: true
+      + control Headset Playback Volume  | id: 5 | channel: 0 | type: int  | value: 5 | min: 0 | max: 6
+      + control Headset Playback Volume  | id: 5 | channel: 1 | type: int  | value: 5 | min: 0 | max: 6
+      x control Headset Capture Switch   | id: 6 | channel: 0 | type: bool | value: true
+      + control Headset Capture Volume   | id: 7 | channel: 0 | type: int  | value: 512 | min: 0 | max: 1024
+
+    + profile Unitek Y-247A | vendor_id: 0x0d8c | product_id: 0x0014 | . also available w/o buttons
+      + devices | playback:     pcmC0D0p
+                | mic_internal: pcmC0D0c
+                | speaker_internal_id: 4
+                | mic_internal_id:     6
+      + playback | samplerate: 48000 | channels: 2 | samplebits: 16
+      + capture  | samplerate: 48000 | channels: 1 | samplebits: 16
+      x control Playback Channel Map    | id: 0 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map    | id: 0 | channel: 1 | type: int  | value: 0 | min: 0 | max: 36
+      x control Capture Channel Map     | id: 1 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Mic Playback Switch     | id: 2 | channel: 0 | type: bool | value: false
+      + control Mic Playback Volume     | id: 3 | channel: 0 | type: int  | value: 16 | min: 0 | max: 31
+      x control Speaker Playback Switch | id: 4 | channel: 0 | type: bool | value: true
+      + control Speaker Playback Volume | id: 5 | channel: 0 | type: int  | value: 37 | min: 0 | max: 37
+      + control Speaker Playback Volume | id: 5 | channel: 1 | type: int  | value: 37 | min: 0 | max: 37
+      x control Mic Capture Switch      | id: 6 | channel: 0 | type: bool | value: true
+      + control Mic Capture Volume      | id: 7 | channel: 0 | type: int  | value: 20 | min: 0 | max: 35
+      + control Auto Gain Control       | id: 8 | channel: 0 | type: bool | value: true
+
+    + profile Jabra SPEAK 510 | vendor_id: 0x0b0e | product_id: 0x0420 | . does not work, investigation needed
+      + devices | playback: pcmC0D0p | mic_internal: pcmC0D0c
+                | speaker_internal_id: 2
+                | mic_internal_id:     4
+      + playback | samplerate: 48000 | channels: 2 | samplebits: 16
+      + capture  | samplerate: 16000 | channels: 1 | samplebits: 16
+      x control Playback Channel Map | id: 0 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map | id: 0 | channel: 1 | type: int  | value: 0 | min: 0 | max: 36
+      x control Capture Channel Map  | id: 1 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control PCM Playback Switch  | id: 2 | channel: 0 | type: bool | value: true
+      + control PCM Playback Volume  | id: 3 | channel: 0 | type: int  | value: 7 | min: 0 | max: 11
+      x control Mic Capture Switch   | id: 4 | channel: 0 | type: bool | value: true
+      + control Mic Capture Volume   | id: 5 | channel: 0 | type: int  | value: 7 | min: 0 | max: 7
+
+    + profile Creative Soundblaster Play 2 | vendor_id: 0x041e | product_id: 0x323
+      + devices | playback:     pcmC0D0p
+                | mic_internal: pcmC0D0c
+                | speaker_internal_id: 4
+                | mic_internal_id:     2
+      + playback | samplerate: 44100 | channels: 2 | samplebits: 16
+      + capture  | samplerate: 44100 | channels: 2 | samplebits: 16
+      x control Capture Channel Map     | id: 0 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Capture Channel Map     | id: 0 | channel: 1 | type: int  | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map    | id: 1 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map    | id: 1 | channel: 1 | type: int  | value: 0 | min: 0 | max: 36
+      x control Mic Capture Switch      | id: 2 | channel: 0 | type: bool | value: true
+      + control Mic Capture Volume      | id: 3 | channel: 0 | type: int  | value: 20 | min: 0 | max: 40
+      x control Speaker Playback Switch | id: 4 | channel: 0 | type: bool | value: true
+      + control Speaker Playback Volume | id: 5 | channel: 0 | type: int  | value: 44 | min: 0 | max: 52
+      + control Speaker Playback Volume | id: 5 | channel: 1 | type: int  | value: 44 | min: 0 | max: 52
+
+    + profile I'm Fulla Schiit | vendor_id: 0x0d8c | product_id: 0x1066
+      + devices | playback: pcmC0D0p
+                | speaker_internal_id: 1
+      + playback | samplerate: 48000 | channels: 2
+      + control Playback Channel Map | id: 0 | channel: 0 | type: int | value: 0 | min: 0 | max: 36
+      + control Playback Channel Map | id: 0 | channel: 1 | type: int | value: 0 | min: 0 | max: 36
+      x control PCM Playback Switch  | id: 1 | channel: 0 | type: bool | value: true
+
+    + profile Schiit Hel | vendor_id: 0x30be | product_id: 0x0101
+      + devices | playback:     pcmC0D0p
+                | mic_internal: pcmC0D0c
+                | speaker_internal_id: 2
+                | mic_internal_id: 6
+      + playback | samplerate: 48000 | channels: 2 | samplebits: 16
+      + capture  | samplerate: 48000 | channels: 2 | samplebits: 24
+      x control Playback Channel Map     | id: 0 | channel: 0 | type: int | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map     | id: 0 | channel: 1 | type: int | value: 0 | min: 0 | max: 36
+      x control Capture Channel Map      | id: 1 | channel: 0 | type: int | value: 0 | min: 0 | max: 36
+      x control Capture Channel Map      | id: 1 | channel: 1 | type: int | value: 0 | min: 0 | max: 36
+      x control PCM Playback Switch      | id: 2 | channel: 0 | type: bool | value: true
+      + control Clock Source 18 Validity | id: 3 | channel: 0 | type: bool | value: false
+      + control Speaker - Output Jack    | id: 4 | channel: 0 | type: bool | value: true
+      + control Mic - Input Jack         | id: 5 | channel: 0 | type: bool | value: true
+      x control Mic Capture Switch       | id: 6 | channel: 0 | type: bool | value: false
+      + control Clock Source 22 Validity | id: 7 | channel: 0 | type: bool | value: true
+
+    + profile Creative Bluetooth Audio W2 | vendor_id: 0x041e | product_id: 0x3125
+      + devices | playback: pcmC0D0p
+      + playback | samplerate: 48000 | channels: 2 | samplebits: 16
+      + capture  | samplerate: 48000 | channels: 1 | samplebits: 16
+      x control Capture Channel Map  | id: 0 | channel: 0 | type: int | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map | id: 1 | channel: 0 | type: int | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map | id: 1 | channel: 1 | type: int | value: 0 | min: 0 | max: 36
+
+    + profile USB PnP Sound Device | vendor_id: 0x8086 | product_id: 0x0808
+      + devices | playback:     pcmC0D0p
+                | mic_internal: pcmC0D0c
+                | speaker_internal_id: 2
+                | mic_internal_id:     4
+      + playback | samplerate: 48000 | channels: 2 | samplebits: 16
+      + capture  | samplerate: 48000 | channels: 1 | samplebits: 16
+      x control Playback Channel Map | id: 0 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map | id: 0 | channel: 1 | type: int  | value: 0 | min: 0 | max: 36
+      x control Capture Channel Map  | id: 1 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control PCM Playback Switch  | id: 2 | channel: 0 | type: bool | value: true
+      + control PCM Playback Volume  | id: 3 | channel: 0 | type: int  | value: 150 | min: 0 | max: 151
+      + control PCM Playback Volume  | id: 3 | channel: 1 | type: int  | value: 150 | min: 0 | max: 151
+      x control Mic Capture Switch   | id: 4 | channel: 0 | type: bool | value: true
+      + control Mic Capture Volume   | id: 5 | channel: 0 | type: int  | value: 0 | min: 0 | max: 16
+      + control Auto Gain Control    | id: 6 | channel: 0 | type: bool | value: true
+
+    + profile NXZT Mini USB Mic | vendor_id: 0x1e71 | product_id: 0x2608
+      + devices | playback:     pcmC0D0p
+                | mic_internal: pcmC0D0c
+                | speaker_internal_id: 7
+                | mic_internal_id:     2
+      + playback | samplerate: 48000 | channels: 2 | samplebits: 24
+      + capture  | samplerate: 48000 | channels: 2 | samplebits: 24
+      x control Capture Channel Map       | id: 0 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Capture Channel Map       | id: 0 | channel: 1 | type: int  | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map      | id: 1 | channel: 0 | type: int  | value: 0 | min: 0 | max: 36
+      x control Playback Channel Map      | id: 1 | channel: 1 | type: int  | value: 0 | min: 0 | max: 36
+      + control Mic Capture Switch        | id: 2 | channel: 0 | type: bool | value: true
+      + control Mic Capture Volume        | id: 3 | channel: 0 | type: int  | value: 29 | min: 0 | max: 40
+      + control Mic Capture Volume        | id: 3 | channel: 1 | type: int  | value: 29 | min: 0 | max: 40
+      x control Extension Unit Switch     | id: 4 | channel: 0 | type: bool | value: false
+      x control Sidetone Playback Switch  | id: 5 | channel: 0 | type: bool | value: true
+      + control Sidetone Playback Volume  | id: 6 | channel: 0 | type: int  | value: 13 | min: 0 | max: 17
+      + control Sidetone Playback Volume  | id: 6 | channel: 1 | type: int  | value: 13 | min: 0 | max: 17
+      x control Headphone Playback Switch | id: 7 | channel: 0 | type: bool | value: true
+      + control Headphone Playback Volume | id: 8 | channel: 0 | type: int  | value: 103 | min: 0 | max: 128
+      + control Headphone Playback Volume | id: 8 | channel: 1 | type: int  | value: 103 | min: 0 | max: 128
+  + route
+    + service Timer  | + child timer
+    + service Usb    | + child usb
+    + service Record | + child mixer
+    + service Play   | + child mixer
+    + service Report | + child mixer_report_rom
+    + any-service    | + parent
+
++ start test-audio_play | ram: 8M
+  + config | sample_path: sample.f32
+  | + vfs | + rom sample.f32
+  + route
+    + any-service
+      + parent
+      + any-child
+
+-}
+
+#
+# Define USB config
+#
+set fd [open [run_dir]/genode/usb.config w]
+puts $fd {
+config
+  + report | devices: yes
+  + policy | label_prefix: usb_audio
+    | + device | vendor_id: 0x047f | product_id: 0xc053 | . Plantronics Blackwire 5220 Series
+    | + device | vendor_id: 0x0d8c | product_id: 0x0014 | . Unitek Y-247A (NewBee)
+    | + device | vendor_id: 0x0b0e | product_id: 0x0420 | . Jabra SPEAK 510
+    | + device | vendor_id: 0x041e | product_id: 0x323d | . Creative Play 2
+    | + device | vendor_id: 0x0d8c | product_id: 0x1066 | . Schiit Fulla
+    | + device | vendor_id: 0x30be | product_id: 0x0101 | . Schiit Hel
+    | + device | vendor_id: 0x041e | product_id: 0x3125 | . Creative Bluetooth Audio W2
+    | + device | vendor_id: 0x8086 | product_id: 0x0808 | . USB PnP Sound Device
+    | + device | vendor_id: 0x1e71 | product_id: 0x2608 | . NZXT Mini USB Mic
+-}
+close $fd
+
+set boot_modules [build_artifacts]
+
+#
+# Get sample file
+#
+
+if {![file exists bin/sample.f32]} {
+	puts ""
+	puts "The sample file is missing. Please take a look at"
+	puts "repos/dde_bsd/README, create 'sample.f32' and put"
+	puts "the file into './bin' directory."
+	puts ""
+	exit 1
+}
+
+lappend boot_modules sample.f32
+
+build_boot_image $boot_modules
+
+run_genode_until forever
+
+# vi: set ft=tcl :
