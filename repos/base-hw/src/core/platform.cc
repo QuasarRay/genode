@@ -266,10 +266,10 @@ Platform::Platform()
 			},
 			[&] (Alloc_error) { });
 
-		auto const preboot_size = _boot_info().plat_info.preboot_size;
+		auto const preboot_size = size_t(_boot_info().plat_info.preboot_size);
 
 		if (preboot_size) {
-			auto const preboot_phys = _boot_info().plat_info.preboot;
+			auto const preboot_phys = addr_t(_boot_info().plat_info.preboot);
 
 			new (core_mem_alloc()) Rom_module(_rom_fs, "preboot",
 			                                  preboot_phys, preboot_size);

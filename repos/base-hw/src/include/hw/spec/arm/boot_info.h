@@ -14,6 +14,14 @@
 #ifndef _SRC__LIB__HW__SPEC__ARM__BOOT_INFO_H_
 #define _SRC__LIB__HW__SPEC__ARM__BOOT_INFO_H_
 
-namespace Board { struct Boot_info {}; }
+#include <base/fixed_stdint.h>
+
+namespace Board {
+	struct Boot_info
+	{
+		Genode::uint64_t preboot      { 0 };
+		Genode::uint64_t preboot_size { 0 };
+	};
+}
 
 #endif /* _SRC__LIB__HW__SPEC__ARM__BOOT_INFO_H_ */
