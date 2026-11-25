@@ -492,8 +492,8 @@ void Core::Platform::_init_rom_modules()
 
 			if (element->id == SEL4_BOOTINFO_HEADER_X86_GENODE_PREBOOT) {
 				auto const values = reinterpret_cast<uint64_t const *>(reinterpret_cast<addr_t>(element) + sizeof(*element));
-				auto const preboot_paddr = values[0];
-				auto const preboot_end   = values[1];
+				auto const preboot_paddr = addr_t(values[0]);
+				auto const preboot_end   = addr_t(values[1]);
 
 				if (preboot_paddr < preboot_end) {
 					auto const preboot_size = align_addr(preboot_end - preboot_paddr, AT_PAGE);
