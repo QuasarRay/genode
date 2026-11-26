@@ -31,8 +31,8 @@
  	    s_lastReportedTime = 0;
  	    s_realTimePrevious = 0;
  	}
---- src/virtualbox7/src/libs/openssl-3.4.6/crypto/dso/dso_dlfcn.c
-+++ src/virtualbox7/src/libs/openssl-3.4.6/crypto/dso/dso_dlfcn.c
+--- src/virtualbox7/src/libs/openssl-3.5.8/crypto/dso/dso_dlfcn.c
++++ src/virtualbox7/src/libs/openssl-3.5.8/crypto/dso/dso_dlfcn.c
 @@ -241,6 +241,8 @@ static char *dlfcn_merger(DSO *dso, const char *filespec1,
      return merged;
  }
@@ -42,8 +42,8 @@
  static char *dlfcn_name_converter(DSO *dso, const char *filename)
  {
      char *translated;
---- src/virtualbox7/src/libs/openssl-3.4.6/crypto/info.c
-+++ src/virtualbox7/src/libs/openssl-3.4.6/crypto/info.c
+--- src/virtualbox7/src/libs/openssl-3.5.8/crypto/info.c
++++ src/virtualbox7/src/libs/openssl-3.5.8/crypto/info.c
 @@ -13,7 +13,7 @@
  #include "internal/thread_once.h"
  #include "internal/cryptlib.h"
@@ -53,8 +53,8 @@
  
  #ifndef OPENSSL_NO_JITTER
  #include <stdio.h>
---- src/virtualbox7/src/libs/openssl-3.4.6/crypto/thread/arch/thread_posix.c
-+++ src/virtualbox7/src/libs/openssl-3.4.6/crypto/thread/arch/thread_posix.c
+--- src/virtualbox7/src/libs/openssl-3.5.8/crypto/thread/arch/thread_posix.c
++++ src/virtualbox7/src/libs/openssl-3.5.8/crypto/thread/arch/thread_posix.c
 @@ -15,6 +15,8 @@
  #include <sys/types.h>
  #include <unistd.h>

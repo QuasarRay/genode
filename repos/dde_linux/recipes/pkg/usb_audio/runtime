@@ -1,0 +1,14 @@
+runtime | ram: 16M | caps: 200 | binary: usb_audio
++ requires
+  + play
+  + record
+  + report
+  + timer
+  + usb
+
++ config | report_mixer: yes | report_devices: yes
+
++ content
+  + rom | label: ld.lib.so
+  + rom | label: usb_audio
+-

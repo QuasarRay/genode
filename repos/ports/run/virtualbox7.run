@@ -241,21 +241,20 @@ append config {
 + start vbox1 | priority: -2 | caps: 1800 | ram: 3000M
   + binary virtualbox7
   + config | vbox_file: virtualbox7.vbox | vm_name: TestVM | ld_verbose: yes
-    + libc | stdout: /dev/log | stderr: /dev/log | pipe: /pipe | rtc: /dev/rtc
-    | + pthread | placement: single-cpu
     + vfs
+      + inline empty | :
       + dir dev
       | + device | + log
       | + device | + rtc
       | + device | + null
-      | + device | + zero
-      + dir pipe
-        + pipe}
+      | + device | + zero}
 
 append_if [expr $use_serial] config {
-      + dir dev | + device | + terminal}
+      | + device | + terminal}
 
 append config {
+      + dir pipe
+        + pipe
       + rom VBoxVMM.so
       + rom test.iso
       + tar virtualbox7.tar}
@@ -266,6 +265,9 @@ append_if [expr $use_overlay] config {
         + dir ram | + rom overlay.vdi}
 
 append config {
+    + libc | stdin: /empty | stdout: /dev/log | stderr: /dev/log
+           | pipe:  /pipe  | rtc:    /dev/rtc
+    | + pthread | placement: single-cpu
     + monitor | label: VBOX-1
     + arg virtualbox
     + env VBOX_USER_HOME        | : /

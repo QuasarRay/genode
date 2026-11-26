@@ -160,6 +160,7 @@ config | prio_levels: 4
   + binary virtualbox7
   + config | vbox_file: vbox7_genode_usb_hid_raw.vbox | vm_name: TestVM | xhci: yes
     + vfs
+      + inline empty | :
       + dir dev
         + device | + log
         + device | + terminal
@@ -169,7 +170,8 @@ config | prio_levels: 4
       + rom usb_hid_raw.iso
       + rom VBoxVMM.so
       + tar virtualbox7.tar
-    + libc | stdout: /dev/log | stderr: /dev/log | pipe: /pipe | rtc: /dev/rtc
+    + libc | stdin: /empty | stdout: /dev/log | stderr: /dev/log
+           | pipe:  /pipe  | rtc:    /dev/rtc
     + monitor | label: VBOX-1
     + arg     | : virtualbox
     + env VBOX_USER_HOME | : /

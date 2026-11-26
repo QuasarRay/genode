@@ -126,6 +126,7 @@ genode_usb_client_iface_transfer(genode_usb_client_dev_handle_t handle,
                                  genode_usb_client_iface_type_t type,
                                  genode_uint8_t                 index,
                                  unsigned long                  size,
+                                 genode_uint32_t                isoc_packets,
                                  void                          *opaque_data);
 
 #ifdef __cplusplus

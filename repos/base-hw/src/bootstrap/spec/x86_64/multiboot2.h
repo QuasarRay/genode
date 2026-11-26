@@ -73,6 +73,30 @@ class Genode::Multiboot2_info : Mmio<0x8>
 
 		Multiboot2_info(addr_t mbi) : Mmio({(char *)mbi, Mmio::SIZE}) { }
 
+		/*
+		 * Remove the MBI 2 data from the free available memory
+		 */
+		void guard_add_mem(auto const start, auto const size, auto const &fn)
+		{
+			auto const end = base() + read<Size>() - 1;
+
+			if ((start + size <= base()) || (start > end)) {
+				fn(start, size);
+				return;
+			}
+
+			if (start < base()) {
+				auto const s = base() - start;
+				if (s)
+					fn(start, s);
+			}
+			if (end < start + size) {
+				auto const s = start + size - end + 1;
+				if (s)
+					fn(end + 1, s);
+			}
+		}
+
 		void for_each_tag(auto const &mem_fn,
 		                  auto const &acpi_rsdp_v1_fn,
 		                  auto const &acpi_rsdp_v2_fn,

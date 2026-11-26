@@ -4,6 +4,39 @@
                                ===========
 
 
+Genode OS Framework release 26.11 | 2026-11-26
+##############################################
+
+| The final release of the year introduces the new ability to develop
+| Genode software directly on Genode without depending on virtualization.
+| It also makes the system tolerant against USB host-driver failures,
+| adds compatibility for Intel Panther Lake, and features USB audio.
+
+With version 26.11, our year-long ambition of transplanting Genode's Goa SDK
+from Linux to Genode has come to fruition. This work entailed the porting
+of a long list of tools including Git, Sequoia PGP, CMake, less, man, and
+many others, which have now become available at the finger tips of Genode
+users. The porting work went hand in hand with the continuous nurturing
+of the framework's POSIX emulation layer, which was needed to make the
+tools feel right at home. The resulting on-target Goa SDK is readily available
+for the latest version of Sculpt OS now.
+
+As a major architectural feat, the release applies Genode's concept of
+pluggable drivers to the USB host driver. As a premiere, this concept
+has been realized for a bus driver. Thanks to the new architecture,
+USB-using applications survive crashes or restarts or on-the-fly updates
+of the USB host-controller driver, improving fail-safety.
+
+The release also represents the finishing line of another year-long effort,
+namely the framework's transition from XML to our custom HID format.
+We are happy to report that XML support has been dropped now.
+Further topics of version 26.11 range from driver support for Intel
+Panther-Lake platforms, over USB audio, to the reorganization of the
+Genode-world collection of 3rd-party software.
+All the topics are covered in more detail by the
+[https:/documentation/release-notes/26.11 - release documentation of version 26.11...]
+
+
 Sculpt OS release 26.10 | 2026-10-30
 ####################################
 

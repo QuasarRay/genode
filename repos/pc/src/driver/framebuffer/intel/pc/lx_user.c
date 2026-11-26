@@ -959,21 +959,33 @@ static void _report_connectors(void * genode_data, bool const discrete)
 		if (connector->edid_blob_ptr)
 			display_name_from_edid(connector->edid_blob_ptr, display_name, sizeof(display_name));
 
-		if (conf_mode.brightness) {
-			brightness = get_brightness(dev_client,
-			                            &states[connector->index].fb_cmd,
-			                            connector, INVALID_BRIGHTNESS);
+		/* hw brightness value or INVALID_BRIGHTNESS if not supported */
+		brightness = get_brightness(dev_client,
+		                            &states[connector->index].fb_cmd,
+		                            connector, INVALID_BRIGHTNESS);
 
-			if (!brightness && conf_mode.brightness)
-				brightness = conf_mode.brightness;
+		if (brightness != INVALID_BRIGHTNESS) {
 
-			/* heuristic to suppress reporting of failed brightness changes */
-			if (max(brightness, conf_mode.brightness) -
-			    min(brightness, conf_mode.brightness) > 50 /* percent */) {
+			unsigned sanitize_value = conf_mode.brightness;
+
+			/*
+			 * Check for case that config has no brightness value set,
+			 * but hw tells that we have a value ... overwrite sanitize_value
+			 */
+			if (sanitize_value == INVALID_BRIGHTNESS) {
+				printk(" no config brightness but hw has brightness "
+				       "for '%s' %u\n", connector->name, brightness);
+				sanitize_value = brightness; /* overwrite for check below */
+			}
+
+			/* if hw value deviate too much, report sanitized value */
+			if (max(brightness, sanitize_value) -
+			    min(brightness, sanitize_value) > 50 /* percent */) {
 
 				printk(" suppress brightness report for '%s' due to %u vs %u\n",
 				       connector->name, brightness, conf_mode.brightness);
-				brightness = INVALID_BRIGHTNESS;
+
+				brightness = sanitize_value;
 			}
 		}
 

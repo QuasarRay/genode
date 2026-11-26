@@ -225,8 +225,6 @@ class Core::Rm_faulter : Fifo<Rm_faulter>::Element, Interface
 
 	public:
 
-		using Fifo<Rm_faulter>::Element::enqueued;
-
 		/**
 		 * Constructor
 		 *

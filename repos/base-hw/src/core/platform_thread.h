@@ -258,14 +258,7 @@ class Core::Platform_thread : Noncopyable
 		/**
 		 * Resume this thread
 		 */
-		void resume()
-		{
-			if (exception_state() !=
-			    Kernel::Thread::Exception_state::NO_EXCEPTION)
-				restart();
-
-			Kernel::thread_resume(*_kobj);
-		}
+		void resume();
 
 		/**
 		 * Get raw thread state

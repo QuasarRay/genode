@@ -198,7 +198,9 @@ static inline void parse_multi_boot_2(::Board::Boot_info      &info,
 		uint64_t const base = m.read<Multiboot2_info::Memory::Addr>();
 		uint64_t const size = m.read<Multiboot2_info::Memory::Size>();
 
-		memory_add_region(base, size, early, late);
+		mbi2.guard_add_mem(base, size, [&](auto guarded_base, auto guarded_size) {
+			memory_add_region(guarded_base, guarded_size, early, late);
+		});
 	},
 	[&] (Hw::Acpi::Rsdp const &rsdp_v1) {
 		/* only use ACPI RSDP v1 if nothing available/valid by now */

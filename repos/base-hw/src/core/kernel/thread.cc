@@ -777,6 +777,11 @@ void Core_thread::_call_thread_pause(Thread &thread)
 
 void Core_thread::_call_thread_resume(Thread &thread)
 {
+	if (thread.exception_state() != Exception_state::NO_EXCEPTION) {
+		thread._restart();
+		return;
+	}
+
 	if (thread._state == ACTIVE && thread._paused)
 		thread._activate();
 
