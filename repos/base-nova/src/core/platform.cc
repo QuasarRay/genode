@@ -723,6 +723,9 @@ Core::Platform::Platform()
 				g.node("boot", [&] {
 					g.attribute("efi", efi_boot);
 
+					if (!boot_fb)
+						return;
+
 					g.node("framebuffer", [&] {
 						g.attribute("phys",   String<32>(Hex(boot_fb->addr)));
 						g.attribute("width",  Resolution::Width::get(boot_fb->size));
