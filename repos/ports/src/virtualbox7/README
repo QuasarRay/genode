@@ -48,6 +48,12 @@ The label can be used by the window manager to configure and place the
 corresponding window. The order of the nodes directly controls the
 connection order at the virtual graphics card.
 
+A 'monitor' node can have an optional 'mouse_grab: yes' attribute. If
+specified, a click into the VMM captures the pointer, thereby enabling the
+guest OS to interpret relative mouse motion directly. When using the window
+manager 'wm', the user can forcefully release the grabbed pointer by pressing
+the global wm key.
+
 Secure Boot
 ~~~~~~~~~~~
 

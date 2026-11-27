@@ -367,7 +367,27 @@ struct Main : Event_handler
 		ComPtr<IDisplay>          const display;
 		unsigned                  const id;
 
-		Label label { };
+		struct Attr
+		{
+			Label label;
+			bool  mouse_grab;
+
+			static Attr from_node(Node const &node)
+			{
+				return {
+					.label      = node.attribute_value("label", Label("")),
+					.mouse_grab = node.attribute_value("mouse_grab", false)
+				};
+			}
+
+			bool operator == (Attr const &other) const
+			{
+				return label      == other.label
+				    && mouse_grab == other.mouse_grab;
+			}
+		};
+
+		Attr attr { };
 
 		Constructible<Gui::Connection>     gui;
 		Constructible<Gui::Top_level_view> gui_view;
@@ -378,10 +398,10 @@ struct Main : Event_handler
 		Monitor(Registry<Monitor> &, Env &,
 		        Signal_context_capability input_sigh,
 		        Signal_context_capability mode_sigh,
-		        ComPtr<IDisplay>, unsigned id, Label const &);
+		        ComPtr<IDisplay>, unsigned id, Attr const &);
 		~Monitor();
 
-		void update(Label const &label);
+		void update(Attr const &);
 
 		/*
 		 * Synchronize with pthreads, e.g. EMT-0...X, "VMSVGA FIFO" etc
@@ -543,11 +563,11 @@ Main::Monitor::Fb::~Fb()
 }
 
 
-void Main::Monitor::update(Label const &new_label)
+void Main::Monitor::update(Attr const &new_attr)
 {
-	if (new_label == label) return;
+	if (new_attr == attr) return;
 
-	label = new_label;
+	attr = new_attr;
 
 	synchronize([&]() {
 
@@ -555,8 +575,9 @@ void Main::Monitor::update(Label const &new_label)
 		gui_view.destruct();
 		gui.destruct();
 
-		gui.construct(env, label);
+		gui.construct(env, attr.label);
 		gui_view.construct(*gui);
+		gui->input.exclusive(attr.mouse_grab);
 		gui->input.sigh(input_sigh);
 		gui->info_sigh(mode_sigh);
 
@@ -577,12 +598,12 @@ void Main::Monitor::update(Label const &new_label)
 Main::Monitor::Monitor(Registry<Monitor> &registry, Env &env,
                        Signal_context_capability input_sigh,
                        Signal_context_capability mode_sigh,
-                       ComPtr<IDisplay> display, unsigned id, Label const &label)
+                       ComPtr<IDisplay> display, unsigned id, Attr const &attr)
 :
 	Registry<Monitor>::Element(registry, *this), env(env),
 	input_sigh(input_sigh), mode_sigh(mode_sigh), display(display), id(id)
 {
-	update(label);
+	update(attr);
 }
 
 
@@ -610,8 +631,6 @@ void Main::_update_monitors()
 	/* handle new and updated monitors */
 	_config.node().for_each_sub_node("monitor", [&] (Node const &node) {
 
-		Monitor::Label label = node.attribute_value("label", Monitor::Label(""));
-
 		if (id > max_id) {
 			warning("ignoring ", node, " for monitor id=", id, " max=", max_id,
 			        " (monitorCount in vbox file!)");
@@ -624,14 +643,14 @@ void Main::_update_monitors()
 		_monitors.for_each([&] (Monitor &m) {
 			if (m.id != id) return;
 
-			m.update(label);
+			m.update(Monitor::Attr::from_node(node));
 			updated = true;
 		});
 
 		/* create new monitor */
 		if (!updated)
 			new Monitor(_monitors, _env, _input_handler, _fb_mode_handler,
-			            _idisplay, id, label);
+			            _idisplay, id, Monitor::Attr::from_node(node));
 
 		++id;
 	});

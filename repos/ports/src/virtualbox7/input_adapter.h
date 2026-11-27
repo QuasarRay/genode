@@ -126,6 +126,9 @@ void Input_adapter::Mouse::handle_input_event(Input::Event const &ev, Point orig
 	ev.handle_absolute_motion([&] (int ax, int ay) {
 		_abs_pos = origin + Point(ax, ay); });
 
+	Point rel { };
+	ev.handle_relative_motion([&] (int rx, int ry) { rel = { rx, ry }; });
+
 	int wheel_x = 0, wheel_y = 0;
 	ev.handle_wheel([&] (int x, int y) { wheel_x = -x; wheel_y = -y; });
 
@@ -135,11 +138,12 @@ void Input_adapter::Mouse::handle_input_event(Input::Event const &ev, Point orig
 	bool const buttons_changed = (old_mouse_button_bits != mouse_button_bits);
 	bool const wheel_changed   = (wheel_x || wheel_y);
 
-	if (abs_pos_changed || buttons_changed || wheel_changed) {
+	if (abs_pos_changed || rel.x || rel.y || buttons_changed || wheel_changed) {
 		if (_absolute) {
 			_imouse->PutMouseEventAbsolute(_abs_pos.x, _abs_pos.y, wheel_y, wheel_x, mouse_button_bits);
 		} else {
-			Point const rel = _abs_pos - old_abs_pos;
+			if (rel.x == 0 && rel.y == 0)
+				rel = _abs_pos - old_abs_pos;
 
 			_imouse->PutMouseEvent(rel.x, rel.y, wheel_y, wheel_x, mouse_button_bits);
 		}
