@@ -22,7 +22,6 @@
 #include <lx_kit/env.h>
 #include <lx_kit/firmware.h>
 #include <lx_kit/init.h>
-#include <lx_kit/initial_config.h>
 
 /* local includes */
 #include "audio.h"

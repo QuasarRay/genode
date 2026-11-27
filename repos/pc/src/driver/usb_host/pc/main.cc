@@ -1,5 +1,5 @@
 /*
- * \brief  i.MX8 USB-card driver Linux port
+ * \brief  PC USB-host-controller driver Linux port
  * \author Stefan Kalkowski
  * \date   2021-06-29
  */
@@ -11,6 +11,7 @@
  * version 2.
  */
 
+#include <base/attached_rom_dataspace.h>
 #include <base/component.h>
 #include <base/env.h>
 
@@ -19,7 +20,6 @@
 #include <lx_emul/usb.h>
 #include <lx_kit/env.h>
 #include <lx_kit/init.h>
-#include <lx_kit/initial_config.h>
 #include <lx_user/io.h>
 
 #include <genode_c_api/usb.h>
@@ -49,6 +49,7 @@ struct Main
 	Env                  &env;
 	Signal_handler<Main>  signal_handler { env.ep(), *this,
 	                                       &Main::handle_signal };
+	Attached_rom_dataspace config_rom { env, "config" };
 
 	void handle_signal()
 	{
@@ -60,11 +61,7 @@ struct Main
 
 	Main(Env &env) : env(env)
 	{
-		{
-			Lx_kit::Initial_config config { env };
-
-			_bios_handoff = config.rom.node().attribute_value("bios_handoff", true);
-		}
+		_bios_handoff = config_rom.node().attribute_value("bios_handoff", true);
 
 		Lx_kit::initialize(env, signal_handler);
 
