@@ -55,6 +55,8 @@ struct Boloa::Mbi
 
 	Range  preserve_report_mem { };
 
+	unsigned phys_img_start() { return image_offset + unsigned(&_prog_img_beg); };
+
 	unsigned aligned_prog_img_size() const
 	{
 		return align_addr(unsigned(&_prog_img_end), { .log2 = LOG2_4MB }) -
@@ -199,7 +201,8 @@ struct Boloa::Mbi
 			    overlap_src ? "source " : "",
 			    Hex_range(image.start, image.size), " ",
 			    Hex(src.start), "+", Hex(src.size), " -> ",
-			    Hex(dst.start), "+", Hex(dst.size));
+			    Hex(dst.start), "+", Hex(dst.size),
+			    " image_offset=", Hex(image_offset));
 
 		if (overlap_src && overlap_dst) {
 			warning("  overlap during memcpy detected ... boot will fail");
@@ -261,9 +264,7 @@ struct Boloa::Mbi
 
 	bool relocation_myself_required(Elf_binary &elf)
 	{
-		auto const phys_img_start = image_offset + addr_t(&_prog_img_beg);
-		auto const phys_img_end   = image_offset + addr_t(&_prog_img_beg) -
-		                            aligned_prog_img_size() - 1;
+		auto const phys_img_end = phys_img_start() + aligned_prog_img_size() - 1;
 
 		Elf_segment seg;
 
@@ -277,14 +278,14 @@ struct Boloa::Mbi
 			auto seg_start = seg.phys_start();
 			auto seg_end   = seg.phys_start() + seg.mem_size() - 1;
 
-			if (seg_end < phys_img_start) continue;
+			if (seg_end < phys_img_start()) continue;
 			if (seg_start > phys_img_end) continue;
 
 			log(" bootloader overlap with module detected");
 
 			if (verbose)
-				log("  ", Hex(phys_img_start), "-", Hex(phys_img_end), " vs ",
-				          Hex(seg_start), "-", Hex(seg_end));
+				log("  ", Hex(phys_img_start()), "-", Hex(phys_img_end),
+				    " vs ", Hex(seg_start), "-", Hex(seg_end));
 
 			return true;
 		}
@@ -421,7 +422,7 @@ struct Boloa::Mbi
 		                       .size  = gdt_end - gdt_base };
 		Range const mbi_data { .start = mbi_base(),
 		                       .size  = mbi_size() };
-		Range const phys_img { .start = image_offset + addr_t(&_prog_img_beg),
+		Range const phys_img { .start = phys_img_start(),
 		                       .size  = aligned_prog_img_size() };
 
 		bool const overlap_gdt      = intersect(gdt_data, region);

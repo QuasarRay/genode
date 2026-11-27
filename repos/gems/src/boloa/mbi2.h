@@ -570,10 +570,8 @@ class Boloa::Mbi2 : Mmio<0x8>, Boloa::Mbi
 
 		void move_and_adjust_range(Range &range, char const * name)
 		{
-			auto const phys_img_start = image_offset + unsigned(&_prog_img_beg);
-
 			Memory_args args { .min_phys  = max(highest_elf_physical_addr(),
-			                                    phys_img_start +
+			                                    phys_img_start() +
 			                                    aligned_prog_img_size()),
 			                   .max_phys  = ~0u,
 			                   .min_align = 12 };
@@ -594,12 +592,11 @@ class Boloa::Mbi2 : Mmio<0x8>, Boloa::Mbi
 
 		void move_myself_physical()
 		{
-			auto const phys_img_start = image_offset + unsigned(&_prog_img_beg);
 			auto const phys_img_end   = image_offset + unsigned(&_prog_img_end);
-			auto const phys_size      = phys_img_end - phys_img_start;
+			auto const phys_size      = phys_img_end - phys_img_start();
 
 			Memory_args args { .min_phys  = max(highest_elf_physical_addr(),
-			                                    phys_img_start +
+			                                    phys_img_start() +
 			                                    aligned_prog_img_size()),
 			                   .max_phys  = ~0u,
 			                   .min_align = LOG2_16MB };
@@ -657,7 +654,9 @@ class Boloa::Mbi2 : Mmio<0x8>, Boloa::Mbi
 			if (!relocate_mbi2_info)
 				return unsigned(mbi2.start);
 
-			Memory_args args { .min_phys  = highest_elf_physical_addr(),
+			Memory_args args { .min_phys  = max(highest_elf_physical_addr(),
+			                                    phys_img_start() +
+			                                    aligned_prog_img_size()),
 			                   .max_phys  = ~0u,
 			                   .min_align = 12 };
 
